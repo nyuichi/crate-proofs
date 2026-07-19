@@ -289,6 +289,17 @@ extern_spec! {
         fn len(&self) -> usize;
 
         #[check(ghost)]
+        #[ensures(result == (self@.len() == 0))]
+        fn is_empty(&self) -> bool;
+
+        #[check(ghost)]
+        #[ensures(match result {
+            Some((first, tail)) => self@.len() > 0 && *first == self@[0] && tail@ == self@.tail(),
+            None => self@ == Seq::empty(),
+        })]
+        fn split_first(&self) -> Option<(&T, &[T])>;
+
+        #[check(ghost)]
         #[requires(i@ < self@.len())]
         #[requires(j@ < self@.len())]
         #[ensures((^self)@.exchange(self@, i@, j@))]
@@ -418,6 +429,12 @@ extern_spec! {
         #[check(ghost)]
         #[ensures(self == result@)]
         fn into_iter(self) -> Iter<'a, T>;
+    }
+
+    impl<'a, T> Iter<'a, T> {
+        #[check(ghost)]
+        #[ensures(result == self@)]
+        fn as_slice(&self) -> &'a [T];
     }
 
     impl<'a, T> IntoIterator for &'a mut [T] {

@@ -7,6 +7,7 @@ pub mod char;
 pub mod clone;
 pub mod cmp;
 pub mod convert;
+pub mod cow;
 pub mod default;
 pub mod fmt;
 pub mod hint;
