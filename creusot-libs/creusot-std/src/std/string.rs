@@ -41,6 +41,14 @@ impl DeepModel for String {
 }
 
 #[cfg(feature = "std")]
+impl FromIteratorSpec<char> for String {
+    #[logic(open)]
+    fn from_iter_post(produced: Seq<char>, value: Self) -> bool {
+        pearlite! { value@ == produced }
+    }
+}
+
+#[cfg(feature = "std")]
 extern_spec! {
     impl Deref for String {
         #[check(ghost)]

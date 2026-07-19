@@ -1,0 +1,14 @@
+# Rust stuff
+/target
+/verif
+/.why3find
+
+# Misc stuff
+.*
+!.gitignore
+!.cargo_vcs_info.json
+!.github/
+!.github/**
+!.*.toml
+!.*.yaml
+!.*.yml

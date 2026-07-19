@@ -12,6 +12,7 @@ Run proofs with:
 ```sh
 ./verify.bash crates/adler2/2.0.0
 ./verify.bash crates/fnv/1.0.7
+./crates/hex/0.4.3/verify-all.bash
 ```
 
 `creusot-libs` contains the Creusot libraries pinned at commit
@@ -48,3 +49,19 @@ The proof keeps `FnvHasher`'s tuple field private, preserving the upstream API.
 Its logical view is opaque outside the crate, so clients can use the contracts
 without depending on that private representation. The upstream FNV test vectors
 also exercise the public `write` and `finish` behavior.
+
+### hex 0.4.3
+
+`hex` 0.4.3 has exact lowercase/uppercase encoding and mixed-case decoding
+models. Contracts cover slice, alloc, trait, fixed-array, and serde-facing
+public APIs across the no-feature, `alloc`, `serde`, and all-feature
+configurations. Slice decoding also specifies error precedence, the first
+invalid character and index, and the precise partially written prefix and
+untouched suffix on failure.
+
+The only trusted portions are explicit generic-adapter boundaries for
+`AsRef`/`FromIterator`, serde's unmodeled visitor protocol, and
+`core::fmt::Formatter`; the codec loops themselves are proved. The version
+audit found no algorithm change from 0.4.2, but did find a feature-level source
+incompatibility: alloc-backed APIs that were available with
+`default-features = false` in 0.4.2 require the new `alloc` feature in 0.4.3.
