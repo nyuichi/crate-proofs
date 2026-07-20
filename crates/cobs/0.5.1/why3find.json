@@ -1,0 +1,10 @@
+{
+  "fast": 0.2,
+  "time": 3,
+  "depth": 1,
+  "packages": ["creusot"],
+  "provers": ["z3", "cvc5"],
+  "tactics": ["split_vc"],
+  "drivers": [],
+  "warnoff": ["unused_variable", "axiom_abstract"]
+}

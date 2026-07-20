@@ -17,6 +17,7 @@ Run proofs with:
 ./crates/hex/0.4.3/verify-all.bash
 ./crates/percent-encoding/2.3.2/verify-all.bash
 ./crates/fugit/0.4.0/verify-all.bash
+./crates/cobs/0.5.1/verify-all.bash
 ```
 
 `creusot-libs` contains the Creusot libraries pinned at commit
@@ -136,3 +137,15 @@ excluded because the upstream wrap-aware/overflow-aware semantics do not obey
 the total-order and equivalence laws assumed by Creusot; the contracted
 `const_*` comparison APIs are retained as the verification interface. Full
 boundary details are recorded in the crate's `PROVENANCE.md`.
+
+### cobs 0.5.1
+
+`cobs` 0.5.1 has contracts on every explicit public function and method and an
+explicit view and invariant for all eleven public nominal types. Contracts cover
+encoding lengths and footprints, canonical-frame round trips, arbitrary
+sentinels, streaming-state bounds, reports, resets, and allocation-backed APIs.
+The primitive encoder and decoder state transitions and length arithmetic are
+proved; buffer orchestration, allocation/heapless adapters, and the opaque exact
+COBS sequence model remain documented trusted boundaries. The proof matrix
+covers no-default-features, alloc, and all features, and the upstream all-feature
+test suite is retained.
