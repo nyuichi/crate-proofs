@@ -12,6 +12,7 @@ Run proofs with:
 ```sh
 ./verify.bash crates/adler2/2.0.0
 ./verify.bash crates/fnv/1.0.7
+./crates/byteorder/1.5.0/verify-all.bash
 ./crates/hex/0.4.3/verify-all.bash
 ./crates/percent-encoding/2.3.2/verify-all.bash
 ```
@@ -21,6 +22,20 @@ Run proofs with:
 standard-library specifications used by the proofs.
 
 ## Current proofs
+
+### byteorder 1.5.0
+
+`byteorder` 1.5.0 has recursive mathematical models for big-endian and
+little-endian decoding. Contracts cover every public `ByteOrder`,
+`ReadBytesExt`, and `WriteBytesExt` method; integer scalar and slice contracts
+specify exact byte-level behavior, signed two's-complement interpretation,
+panic preconditions, and write footprints. Both public marker types have an
+explicit deep model and invariant.
+
+Primitive byte-conversion functions, floating-point bit conversion, and the
+stateful `std::io` protocol remain explicit trusted boundaries because the
+current Creusot standard library does not specify them. The proof matrix covers
+no-default-features and all features.
 
 ### adler2 2.0.0
 
