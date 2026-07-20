@@ -43,3 +43,30 @@ sandbox. Errors such as `Unix.Unix_error(Unix.EPERM, "bind", ...)`, socket
 bind/connect failures, or inability to start the Why3 proof server are environment
 failures, not failed proof obligations. Rerun the same target-scoped proof command
 outside the sandbox and report the proof result from that run.
+
+## Follow the playbook for mathematical verification
+
+Before verifying a crate with mathematical, iterative, block-based, modular, or
+bit-level algorithms, read [`docs/verification-playbook.md`](docs/verification-playbook.md).
+This includes checksums, hashes, cryptography, compression, numeric algorithms,
+and nontrivial encodings.
+
+Use the playbook's staged trusted-scaffolding workflow, component boundaries,
+proof-status terminology, VC budget, and stop conditions. In particular:
+
+- Prove a small orchestration skeleton before attempting difficult loop or round
+  bodies. Temporary trusted boundaries must have strong reviewed contracts and a
+  recorded removal condition.
+- Give each loop one canonical progress measure. Do not make a large caller
+  repeatedly translate between iterator length, an explicit counter, and several
+  equivalent arithmetic expressions.
+- Do not keep adding assertions or wrapper certificates when a large caller
+  repeatedly fails on equivalent indexing, modular-arithmetic, or sequence goals.
+  If the same shape fails twice, review the interface or split the caller. If the
+  same area fails three times or proof progress moves backward between runs, stop
+  and restructure before continuing.
+- Treat roughly 100--150 goals in one function, or hundreds of lines of proof
+  guidance in one body, as a design warning rather than a challenge to solve by
+  increasing prover time or depth.
+- Distinguish a proved helper, a proved function body, a trusted contract, and a
+  successful crate-level integrated proof. Never report one as another.

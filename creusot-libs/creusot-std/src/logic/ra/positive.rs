@@ -15,7 +15,11 @@ impl RA for Positive {
         None => forall<c: Self> factor.op(c) != Some(self),
     })]
     fn factor(self, factor: Self) -> Option<Self> {
-        if self > factor { Some(Self::new(self.view() - factor.view())) } else { None }
+        if self > factor {
+            Some(Self::new(self.view() - factor.view()))
+        } else {
+            None
+        }
     }
 
     #[logic(law)]

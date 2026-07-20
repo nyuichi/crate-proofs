@@ -72,7 +72,8 @@ impl<R: UnitRA, U: LocalUpdate<R>> Update<Auth<R>> for AuthUpdate<U> {
     fn update(self, from: Auth<R>, _: ()) -> Auth<R> {
         let from_auth = from.auth().unwrap_logic();
         let (auth, frag) = self.0.update(from_auth, from.frag());
-        self.0.frame_preserving(from_auth, from.frag(), from_auth.factor(from.frag()));
+        self.0
+            .frame_preserving(from_auth, from.frag(), from_auth.factor(from.frag()));
         Auth::new(Some(auth), frag)
     }
 
@@ -102,7 +103,10 @@ impl<R: UnitRA> LocalUpdate<R> for OpLocalUpdate<R> {
 
     #[logic(open)]
     fn update(self, from_auth: R, from_frag: R) -> (R, R) {
-        (from_auth.op(*self.0).unwrap_logic(), from_frag.op(*self.0).unwrap_logic())
+        (
+            from_auth.op(*self.0).unwrap_logic(),
+            from_frag.op(*self.0).unwrap_logic(),
+        )
     }
 
     #[logic]

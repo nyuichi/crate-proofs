@@ -185,7 +185,10 @@ impl<K, V: RA> LocalUpdate<FMap<K, V>> for FMapInsertLocalUpdate<K, V> {
 
     #[logic(open, inline)]
     fn update(self, from_auth: FMap<K, V>, from_frag: FMap<K, V>) -> (FMap<K, V>, FMap<K, V>) {
-        (from_auth.insert(*self.0, *self.1), from_frag.insert(*self.0, *self.1))
+        (
+            from_auth.insert(*self.0, *self.1),
+            from_frag.insert(*self.0, *self.1),
+        )
     }
 
     #[logic]

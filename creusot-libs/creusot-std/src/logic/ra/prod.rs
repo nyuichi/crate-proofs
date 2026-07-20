@@ -140,7 +140,10 @@ impl<R1: RA, R2: RA, U1: Update<R1>, U2: Update<R2>> Update<(R1, R2)> for (U1, U
     #[requires(from.op(frame) != None)]
     #[ensures(self.update(from, result).op(frame) != None)]
     fn frame_preserving(self, from: (R1, R2), frame: (R1, R2)) -> Self::Choice {
-        (self.0.frame_preserving(from.0, frame.0), self.1.frame_preserving(from.1, frame.1))
+        (
+            self.0.frame_preserving(from.0, frame.0),
+            self.1.frame_preserving(from.1, frame.1),
+        )
     }
 }
 
@@ -165,7 +168,9 @@ impl<R1: RA, R2: RA, U1: LocalUpdate<R1>, U2: LocalUpdate<R2>> LocalUpdate<(R1, 
         Some(to_frag).op(frame) == Some(Some(to_auth))
     })]
     fn frame_preserving(self, from_auth: (R1, R2), from_frag: (R1, R2), frame: Option<(R1, R2)>) {
-        self.0.frame_preserving(from_auth.0, from_frag.0, frame.map_logic(|f: (R1, R2)| f.0));
-        self.1.frame_preserving(from_auth.1, from_frag.1, frame.map_logic(|f: (R1, R2)| f.1));
+        self.0
+            .frame_preserving(from_auth.0, from_frag.0, frame.map_logic(|f: (R1, R2)| f.0));
+        self.1
+            .frame_preserving(from_auth.1, from_frag.1, frame.map_logic(|f: (R1, R2)| f.1));
     }
 }

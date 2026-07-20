@@ -161,9 +161,18 @@ pub trait PointerExt<T: ?Sized>: Sized {
 
 impl<T: ?Sized> PointerExt<T> for *const T {
     #[logic]
-    #[cfg_attr(target_pointer_width = "16", builtin("creusot.prelude.Ptr$BW$.addr_logic_u16"))]
-    #[cfg_attr(target_pointer_width = "32", builtin("creusot.prelude.Ptr$BW$.addr_logic_u32"))]
-    #[cfg_attr(target_pointer_width = "64", builtin("creusot.prelude.Ptr$BW$.addr_logic_u64"))]
+    #[cfg_attr(
+        target_pointer_width = "16",
+        builtin("creusot.prelude.Ptr$BW$.addr_logic_u16")
+    )]
+    #[cfg_attr(
+        target_pointer_width = "32",
+        builtin("creusot.prelude.Ptr$BW$.addr_logic_u32")
+    )]
+    #[cfg_attr(
+        target_pointer_width = "64",
+        builtin("creusot.prelude.Ptr$BW$.addr_logic_u64")
+    )]
     fn addr_logic(self) -> usize {
         dead
     }
@@ -176,9 +185,18 @@ impl<T: ?Sized> PointerExt<T> for *const T {
 
 impl<T: ?Sized> PointerExt<T> for *mut T {
     #[logic]
-    #[cfg_attr(target_pointer_width = "16", builtin("creusot.prelude.Ptr$BW$.addr_logic_u16"))]
-    #[cfg_attr(target_pointer_width = "32", builtin("creusot.prelude.Ptr$BW$.addr_logic_u32"))]
-    #[cfg_attr(target_pointer_width = "64", builtin("creusot.prelude.Ptr$BW$.addr_logic_u64"))]
+    #[cfg_attr(
+        target_pointer_width = "16",
+        builtin("creusot.prelude.Ptr$BW$.addr_logic_u16")
+    )]
+    #[cfg_attr(
+        target_pointer_width = "32",
+        builtin("creusot.prelude.Ptr$BW$.addr_logic_u32")
+    )]
+    #[cfg_attr(
+        target_pointer_width = "64",
+        builtin("creusot.prelude.Ptr$BW$.addr_logic_u64")
+    )]
     fn addr_logic(self) -> usize {
         dead
     }

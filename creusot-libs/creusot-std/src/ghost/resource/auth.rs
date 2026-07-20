@@ -82,7 +82,9 @@ impl<R: UnitRA> Authority<R> {
     #[ensures(result@ == R::unit())]
     #[allow(unused_variables)]
     pub fn alloc() -> Ghost<Self> {
-        ghost!(Self(Resource::alloc(snapshot!(Auth::new_auth(R::unit()))).into_inner()))
+        ghost!(Self(
+            Resource::alloc(snapshot!(Auth::new_auth(R::unit()))).into_inner()
+        ))
     }
 
     /// Create a new authority/fragment pair from a raw [`Auth`] resource.
@@ -198,7 +200,9 @@ impl<R: UnitRA> Fragment<R> {
     #[ensures(result.1@ == *b)]
     #[allow(unused_variables)]
     pub fn split(self, a: Snapshot<R>, b: Snapshot<R>) -> (Self, Self) {
-        let (r1, r2) = self.0.split(snapshot!(Auth::new_frag(*a)), snapshot!(Auth::new_frag(*b)));
+        let (r1, r2) = self
+            .0
+            .split(snapshot!(Auth::new_frag(*a)), snapshot!(Auth::new_frag(*b)));
         (Fragment(r1), Fragment(r2))
     }
 
@@ -210,7 +214,10 @@ impl<R: UnitRA> Fragment<R> {
     #[ensures(result@ == *r)]
     #[allow(unused_variables)]
     pub fn split_off(&mut self, r: Snapshot<R>, s: Snapshot<R>) -> Self {
-        Fragment(self.0.split_off(snapshot!(Auth::new_frag(*r)), snapshot!(Auth::new_frag(*s))))
+        Fragment(
+            self.0
+                .split_off(snapshot!(Auth::new_frag(*r)), snapshot!(Auth::new_frag(*s))),
+        )
     }
 
     /// Join two owned fragments together.

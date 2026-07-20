@@ -78,7 +78,11 @@ impl<T> Seq<T> {
     /// If `ix` is out of bounds, return `None`.
     #[logic(open)]
     pub fn get(self, ix: Int) -> Option<T> {
-        if 0 <= ix && ix < self.len() { Some(self.index_logic(ix)) } else { None }
+        if 0 <= ix && ix < self.len() {
+            Some(self.index_logic(ix))
+        } else {
+            None
+        }
     }
 
     /// Returns the value at index `ix`.
@@ -303,7 +307,9 @@ impl<T> Seq<T> {
         if self.len() == 0 {
             Seq::empty()
         } else {
-            self.tail().map(m).push_front(m.get(*self.index_logic_unsized(0)))
+            self.tail()
+                .map(m)
+                .push_front(m.get(*self.index_logic_unsized(0)))
         }
     }
 
@@ -313,7 +319,9 @@ impl<T> Seq<T> {
         if self.len() == 0 {
             Seq::empty()
         } else {
-            other.get(*self.index_logic_unsized(0)).concat(self.tail().flat_map(other))
+            other
+                .get(*self.index_logic_unsized(0))
+                .concat(self.tail().flat_map(other))
         }
     }
 

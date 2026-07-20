@@ -76,7 +76,9 @@ macro_rules! impl_well_founded {
     };
 }
 
-impl_well_founded!(u8, u16, u32, u64, u128, usize, i8, i16, i32, i64, i128, isize);
+impl_well_founded!(
+    u8, u16, u32, u64, u128, usize, i8, i16, i32, i64, i128, isize
+);
 
 impl<T: WellFounded> WellFounded for &T {
     #[logic(open, inline)]
@@ -195,7 +197,16 @@ macro_rules! wf_tuples {
     };
 }
 
-wf_tuples!(T0 = 0, T1 = 1, T2 = 2, T3 = 3, T4 = 4, T5 = 5, T6 = 6, T7 = 7);
+wf_tuples!(
+    T0 = 0,
+    T1 = 1,
+    T2 = 2,
+    T3 = 3,
+    T4 = 4,
+    T5 = 5,
+    T6 = 6,
+    T7 = 7
+);
 
 /// Get an index > i, such that `s[index] < s[i]`.
 #[logic]
@@ -205,7 +216,11 @@ wf_tuples!(T0 = 0, T1 = 1, T2 = 2, T3 = 3, T4 = 4, T5 = 5, T6 = 6, T7 = 7);
 #[ensures(T1::well_founded_relation(s[i].0, s[result].0))]
 #[variant(s[i].1)]
 fn extract_next_decr<T1: WellFounded, T2: WellFounded>(s: Mapping<Int, (T1, T2)>, i: Int) -> Int {
-    if T1::well_founded_relation(s[i].0, s[i + 1].0) { i + 1 } else { extract_next_decr(s, i + 1) }
+    if T1::well_founded_relation(s[i].0, s[i + 1].0) {
+        i + 1
+    } else {
+        extract_next_decr(s, i + 1)
+    }
 }
 
 /// Used to construct [`first_component_decr`] below.
@@ -236,5 +251,11 @@ fn extract_nth<T1: WellFounded, T2: WellFounded>(s: Mapping<Int, (T1, T2)>, i: I
 fn first_component_decr<T1: WellFounded, T2: WellFounded>(
     s: Mapping<Int, (T1, T2)>,
 ) -> Mapping<Int, T1> {
-    |i| if 0 <= i { s[extract_nth(s, i)].0 } else { such_that(|_| true) }
+    |i| {
+        if 0 <= i {
+            s[extract_nth(s, i)].0
+        } else {
+            such_that(|_| true)
+        }
+    }
 }

@@ -55,7 +55,10 @@ impl<R: ViewRel> InhabitedInvariant for ViewInner<R> {
     #[logic]
     #[ensures(result.invariant())]
     fn inhabits() -> Self {
-        Self { auth: None, frag: R::Frag::unit() }
+        Self {
+            auth: None,
+            frag: R::Frag::unit(),
+        }
     }
 }
 

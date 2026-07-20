@@ -97,7 +97,10 @@ impl PartialOrd for PeanoInt {
     #[check(ghost)]
     #[ensures(result == (self@ <= other@))]
     fn le(&self, other: &Self) -> bool {
-        matches!(self.partial_cmp(other), Some(Ordering::Less | Ordering::Equal))
+        matches!(
+            self.partial_cmp(other),
+            Some(Ordering::Less | Ordering::Equal)
+        )
     }
     #[check(ghost)]
     #[ensures(result == (self@ > other@))]
@@ -107,7 +110,10 @@ impl PartialOrd for PeanoInt {
     #[check(ghost)]
     #[ensures(result == (self@ >= other@))]
     fn ge(&self, other: &Self) -> bool {
-        matches!(self.partial_cmp(other), Some(Ordering::Greater | Ordering::Equal))
+        matches!(
+            self.partial_cmp(other),
+            Some(Ordering::Greater | Ordering::Equal)
+        )
     }
 }
 impl Ord for PeanoInt {

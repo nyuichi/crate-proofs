@@ -241,6 +241,7 @@ impl<R: RA, U: LocalUpdate<R>> LocalUpdate<Option<R>> for OptionLocalUpdate<U> {
             None => None,
             Some(f) => f,
         };
-        self.0.frame_preserving(from_auth.unwrap_logic(), from_frag.unwrap_logic(), frame)
+        self.0
+            .frame_preserving(from_auth.unwrap_logic(), from_frag.unwrap_logic(), frame)
     }
 }

@@ -59,7 +59,11 @@ pub trait IteratorSpec: Iterator {
         Self: Sized,
         F: FnMut(Self::Item, Snapshot<Seq<Self::Item>>) -> B,
     {
-        MapInv { iter: self, func, produced: snapshot! {Seq::empty()} }
+        MapInv {
+            iter: self,
+            func,
+            produced: snapshot! {Seq::empty()},
+        }
     }
 }
 

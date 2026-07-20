@@ -211,7 +211,10 @@ impl<'a> Tokens<'a> {
     #[ensures(result.1.namespaces() == self.namespaces().remove(*ns))]
     #[check(ghost)]
     pub fn split(self, ns: Snapshot<Namespace>) -> (Tokens<'a>, Tokens<'a>) {
-        (Tokens(PhantomData, PhantomData), Tokens(PhantomData, PhantomData))
+        (
+            Tokens(PhantomData, PhantomData),
+            Tokens(PhantomData, PhantomData),
+        )
     }
 
     #[logic(open)]
