@@ -12,6 +12,7 @@ Run proofs with:
 ```sh
 ./verify.bash crates/adler2/2.0.0
 ./verify.bash crates/fnv/1.0.7
+./crates/crc/3.4.0/verify-all.bash
 ./crates/byteorder/1.5.0/verify-all.bash
 ./crates/hex/0.4.3/verify-all.bash
 ./crates/percent-encoding/2.3.2/verify-all.bash
@@ -23,6 +24,22 @@ Run proofs with:
 standard-library specifications used by the proofs.
 
 ## Current proofs
+
+### crc 3.4.0
+
+`crc` 3.4.0 has table-independent mathematical models for all supported
+register widths (`u8` through `u128`). Contracts cover construction, one-shot
+checksums, incremental digest creation/update/finalization, table access, and
+cloning for `NoTable`, `Table<1>`, and `Table<16>`. The three public nominal
+types have explicit invariants; in particular, `Crc` relates the algorithm
+width and every generated lookup lane to the byte-wise recurrence.
+
+Public orchestration bodies are proved and the crate-scoped integrated proof
+passes. Explicit trusted leaf boundaries remain for lookup-table generation,
+eight-round bitvector helpers, runtime bit reversal during initialization and
+finalization, the optimized byte/slicing-by-16 update bodies, and generic Clone
+adapters. Each boundary has a functional contract and removal condition in
+`PROVENANCE.md`.
 
 ### byteorder 1.5.0
 
