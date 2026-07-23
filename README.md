@@ -23,6 +23,11 @@ Run proofs with:
 ./slab/0.4.12/verify-all.bash
 ./smallvec/1.15.2/verify-all.bash
 ./bytes/1.11.1/verify-all.bash
+./semver/1.0.28/verify-all.bash
+./fixedbitset/0.5.7/verify-all.bash
+./uuid/1.24.0/verify-all.bash
+./bstr/1.13.0/verify-all.bash
+./base64/0.22.1/verify-all.bash
 ./ipnet/2.12.0/verify-all.bash
 ```
 
@@ -31,6 +36,83 @@ Run proofs with:
 standard-library specifications used by the proofs.
 
 ## Current proofs
+
+### semver 1.0.28
+
+`semver` 1.0.28 has an exact model of Cargo's version-requirement evaluation.
+Contracts and proved bodies cover all eight comparator operators, partial
+major/minor/patch versions, requirement conjunction, and the special rule that
+admits prerelease versions only when a comparator names the same numeric
+version with a nonempty prerelease. Both public `matches` methods are proved
+against these models.
+
+The proof matrix covers `no_std` and all features. There are two trusted
+identifier observations: prerelease emptiness and prerelease precedence. They
+isolate the upstream pointer-tagged short-string representation; parsing,
+formatting, serde, and identifier storage/ordering bodies remain outside proof
+translation. The ordinary all-feature upstream suite passes 34 tests. Full
+boundary and removal-condition details are recorded in the crate's
+`PROVENANCE.md`.
+
+### fixedbitset 0.5.7
+
+`fixedbitset` 0.5.7 has an exact finite Boolean-sequence model for its core
+fixed-length state machine. Construction, length and emptiness observation,
+out-of-range membership, clearing, insertion, removal, put, toggle, set, bit
+copying, and grow-and-insert orchestration are proved with element-wise
+contracts. The proof matrix covers no-default-features, default `std`, and all
+features.
+
+The upstream aligned SIMD allocation, raw-pointer ownership, range and set
+algebra, iterators, counting, formatting, adapters, and unsafe APIs remain
+outside proof translation. Ordinary builds retain the complete upstream
+implementation, whose all-feature suite
+passes 63 unit tests and 7 documentation tests. Full boundary and removal
+conditions are in `PROVENANCE.md`.
+
+### uuid 1.24.0
+
+`uuid` 1.24.0 has an exact 16-byte model for `Uuid` and `Builder`. The
+no-default-features proof establishes byte-preserving construction and access,
+the mixed-endian field permutation, nil/max values, variant and version-bit
+extraction, and the exact byte footprints of the consuming builder
+variant/version mutations.
+
+This is not a parser, formatter, generator, or randomness proof. Parsing,
+actual text encoding, `u128`/field/reference reinterpretation adapters,
+timestamps, UUID generation, and the real `NonZero<u128>`-backed `NonNilUuid`
+remain explicit trusted boundaries or Creusot-only exclusions. The generated
+verification manifest keeps the library target named `uuid` but uses a distinct
+package name to avoid Cargo selector ambiguity. Full scope and removal
+conditions are recorded in the crate's `PROVENANCE.md`.
+
+### bstr 1.13.0
+
+`bstr` 1.13.0 has exact positional contracts for its scalar non-ASCII scan and
+the forward and reverse single-byte inverse searches. The proof-facing loops
+establish both the returned differing byte and equality of the complete skipped
+prefix or suffix; unsuccessful searches establish equality of the whole input.
+The proof matrix covers no-default-features, default, and all features.
+
+The published optimized implementations use raw pointers, unaligned word loads,
+and SSE2, so their bodies remain an explicit excluded boundary behind the same
+contracts. UTF-8 decoding, Unicode segmentation, public string types and the
+remaining search, split, allocation, I/O, and serde APIs are not yet verified.
+Full boundary and removal-condition details are in `PROVENANCE.md`.
+
+### base64 0.22.1
+
+`base64` 0.22.1 has exact arithmetic models for padded and unpadded encoded
+lengths and conservative decoded buffer lengths. The length bodies, including
+`usize` overflow behavior, and the `GeneralPurposeConfig` builders are proved.
+The matrix covers `no_std`, `alloc`, and all features.
+
+This is not an RFC 4648 codec proof. Alphabet validation and table generation,
+the optimized encode/decode bodies, suffix handling, padding writes, generic
+and allocation adapters, formatting, and streaming I/O remain explicit trusted
+boundaries or Creusot exclusions. The upstream all-feature suite passes 179
+unit tests, 13 integration tests, and 25 documentation tests. Full boundary and
+removal-condition details are in `PROVENANCE.md`.
 
 ### ipnet 2.12.0
 
