@@ -1,6 +1,6 @@
 # fixedbitset 0.5.7 provenance and verification scope
 
-**Verification status: substantial public subset (partial).**
+**Verification status: broad public state-machine API (partial).**
 
 This source tree is the published `fixedbitset` 0.5.7 crate. Its
 `.cargo_vcs_info.json` records upstream revision
@@ -25,6 +25,10 @@ The verified core contracts are:
   membership is false and exact least/greatest enabled-bit witnesses;
 - `clear`, `insert`, `remove`, `put`, `toggle`, `set`, and `copy_bit`: exact
   element-wise sequence transitions;
+- `contains_unchecked`, `insert_unchecked`, `remove_unchecked`,
+  `put_unchecked`, `toggle_unchecked`, `set_unchecked`, and
+  `copy_bit_unchecked`: the same exact observations and transitions under the
+  unsafe APIs' required in-range preconditions;
 - `grow`: preserved old prefix, exact non-shrinking length, and clear new suffix;
 - `grow_and_insert`: composition of growth with a single enabled bit;
 - `count_ones` and `count_zeroes`: exact cardinalities for all four built-in
@@ -42,6 +46,11 @@ The verified core contracts are:
 - `union_count`, `intersection_count`, `difference_count`, and
   `symmetric_difference_count`: exact cardinalities of the corresponding
   zero-extended finite-set combinations.
+- `Clone`/`clone_from`, `PartialEq`/`Eq`, and indexing: exact sequence copying,
+  sequence equality, and zero-extended bit lookup;
+- `&`, `|`, `^`, `&=`, `|=`, and `^=` operator adapters: exact element-wise
+  results, including the upstream minimum/maximum result-length rules and both
+  owned and borrowed assignment operands.
 
 The proof architecture is:
 
@@ -65,9 +74,12 @@ grow_and_insert / copy_bit
 | range normalization, counting, mutation, and predicates | yes | yes | no | yes |
 | set relations and in-place set algebra | yes | yes | no | yes |
 | set-algebra cardinalities | yes | yes | no | yes |
+| unsafe unchecked single-bit API | yes | yes | no | yes |
+| clone, equality, and indexing adapters | yes | yes | no | yes |
+| bitwise value and assignment operators | yes | yes | no | yes |
 | upstream raw-pointer/SIMD representation | no | no | yes | no |
 
-`./verify-all.bash` succeeds as `Proved (59 files)` for
+`./verify-all.bash` succeeds as `Proved (81 files)` for
 `--no-default-features`, default features, and `--all-features`.
 
 ## Explicit boundary and removal condition
@@ -85,9 +97,12 @@ Remove the representation boundary after the raw allocation has a proved
 initialized-length invariant and each SIMD block operation has a bit-for-bit
 refinement lemma.
 
-Raw block slices and block-level counting, lazy set-algebra iterators,
-formatting, hashing, ordering, serde, unsafe unchecked APIs, drops, and operator
-adapters remain outside the current verification interface. They are retained
-unchanged in ordinary builds and exercised by the upstream tests where
-applicable. The ordinary all-feature suite passes 63 integration tests and 7
-documentation tests.
+Raw block construction/slices and block-level counting, lazy one/zero and
+set-algebra iterators, iterator-based `Extend`/`FromIterator`, formatting,
+hashing, ordering, serde, and drops remain outside the current verification
+interface. Proving the iterator family next requires a separate `IteratorSpec`
+layer that relates each iterator state to the remaining selected indices,
+including independent front/back progress relations for double-ended
+iteration. The remaining APIs are retained unchanged in ordinary builds and
+exercised by the upstream tests where applicable. The ordinary all-feature
+suite passes 63 integration tests and 7 documentation tests.

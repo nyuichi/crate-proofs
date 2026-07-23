@@ -3,7 +3,10 @@
 extern crate alloc;
 
 use alloc::{vec, vec::Vec};
-use core::ops::{Range, RangeFrom, RangeFull, RangeTo};
+use core::ops::{
+    BitAnd, BitAndAssign, BitOr, BitOrAssign, BitXor, BitXorAssign, Index, Range, RangeFrom,
+    RangeFull, RangeTo,
+};
 #[allow(unused_imports)]
 use creusot_std::prelude::{
     ensures, invariant, logic, pearlite, proof_assert, requires, snapshot, variant, DeepModel, Int,
@@ -151,6 +154,12 @@ pub fn max_len(left: Int, right: Int) -> Int {
     pearlite! { if left >= right { left } else { right } }
 }
 
+/// Length of an intersection-shaped result.
+#[logic(open)]
+pub fn min_len(left: Int, right: Int) -> Int {
+    pearlite! { if left <= right { left } else { right } }
+}
+
 /// Select one of union, intersection, difference, or symmetric difference.
 #[logic(open)]
 pub fn combine_bits(left: bool, right: bool, mode: u8) -> bool {
@@ -235,6 +244,15 @@ impl View for FixedBitSet {
     #[logic]
     fn view(self) -> Seq<bool> {
         pearlite! { self.bits@ }
+    }
+}
+
+impl DeepModel for FixedBitSet {
+    type DeepModelTy = Seq<bool>;
+
+    #[logic(open)]
+    fn deep_model(self) -> Seq<bool> {
+        pearlite! { self@ }
     }
 }
 
@@ -357,6 +375,13 @@ impl FixedBitSet {
         }
     }
 
+    /// Return an in-range bit without a runtime bounds check.
+    #[requires(bit@ < self@.len())]
+    #[ensures(result == self@[bit@])]
+    pub unsafe fn contains_unchecked(&self, bit: usize) -> bool {
+        self.bits[bit]
+    }
+
     /// Grow to `bits` bits if necessary, preserving the old prefix and clearing
     /// every newly allocated bit.
     #[ensures((^self)@.len() == if bits@ > self@.len() { bits@ } else { self@.len() })]
@@ -389,10 +414,24 @@ impl FixedBitSet {
         self.bits[bit] = true;
     }
 
+    /// Enable one bit without a runtime bounds check.
+    #[requires(bit@ < self@.len())]
+    #[ensures((^self)@ == self@.set(bit@, true))]
+    pub unsafe fn insert_unchecked(&mut self, bit: usize) {
+        self.bits[bit] = true;
+    }
+
     /// Disable one in-range bit.
     #[requires(bit@ < self@.len())]
     #[ensures((^self)@ == self@.set(bit@, false))]
     pub fn remove(&mut self, bit: usize) {
+        self.bits[bit] = false;
+    }
+
+    /// Disable one bit without a runtime bounds check.
+    #[requires(bit@ < self@.len())]
+    #[ensures((^self)@ == self@.set(bit@, false))]
+    pub unsafe fn remove_unchecked(&mut self, bit: usize) {
         self.bits[bit] = false;
     }
 
@@ -406,10 +445,29 @@ impl FixedBitSet {
         previous
     }
 
+    /// Enable one bit and return its previous value, without a runtime bounds
+    /// check.
+    #[requires(bit@ < self@.len())]
+    #[ensures(result == self@[bit@])]
+    #[ensures((^self)@ == self@.set(bit@, true))]
+    pub unsafe fn put_unchecked(&mut self, bit: usize) -> bool {
+        let previous = self.bits[bit];
+        self.bits[bit] = true;
+        previous
+    }
+
     /// Invert one in-range bit.
     #[requires(bit@ < self@.len())]
     #[ensures((^self)@ == self@.set(bit@, !self@[bit@]))]
     pub fn toggle(&mut self, bit: usize) {
+        let enabled = self.bits[bit];
+        self.bits[bit] = !enabled;
+    }
+
+    /// Invert one bit without a runtime bounds check.
+    #[requires(bit@ < self@.len())]
+    #[ensures((^self)@ == self@.set(bit@, !self@[bit@]))]
+    pub unsafe fn toggle_unchecked(&mut self, bit: usize) {
         let enabled = self.bits[bit];
         self.bits[bit] = !enabled;
     }
@@ -421,6 +479,13 @@ impl FixedBitSet {
         self.bits[bit] = enabled;
     }
 
+    /// Set one bit without a runtime bounds check.
+    #[requires(bit@ < self@.len())]
+    #[ensures((^self)@ == self@.set(bit@, enabled))]
+    pub unsafe fn set_unchecked(&mut self, bit: usize, enabled: bool) {
+        self.bits[bit] = enabled;
+    }
+
     /// Copy `from` to `to`; an out-of-range source is treated as disabled.
     #[requires(to@ < self@.len())]
     #[ensures((^self)@ == self@.set(to@,
@@ -428,6 +493,16 @@ impl FixedBitSet {
     pub fn copy_bit(&mut self, from: usize, to: usize) {
         let enabled = self.contains(from);
         self.set(to, enabled);
+    }
+
+    /// Copy one in-range source bit to one in-range destination without
+    /// runtime bounds checks.
+    #[requires(from@ < self@.len())]
+    #[requires(to@ < self@.len())]
+    #[ensures((^self)@ == self@.set(to@, self@[from@]))]
+    pub unsafe fn copy_bit_unchecked(&mut self, from: usize, to: usize) {
+        let enabled = self.bits[from];
+        self.bits[to] = enabled;
     }
 
     /// Count enabled bits in a valid half-open range.
@@ -877,5 +952,154 @@ impl Default for FixedBitSet {
     #[ensures(result@ == Seq::empty())]
     fn default() -> Self {
         Self::new()
+    }
+}
+
+impl Clone for FixedBitSet {
+    #[ensures(result@ == self@)]
+    fn clone(&self) -> Self {
+        Self {
+            bits: self.bits.clone(),
+        }
+    }
+
+    #[ensures((^self)@ == source@)]
+    fn clone_from(&mut self, source: &Self) {
+        *self = source.clone();
+    }
+}
+
+impl PartialEq for FixedBitSet {
+    #[ensures(result == (self@ == other@))]
+    fn eq(&self, other: &Self) -> bool {
+        if self.bits.len() != other.bits.len() {
+            return false;
+        }
+        let mut index = 0usize;
+        #[invariant(index@ <= self@.len())]
+        #[invariant(self@.len() == other@.len())]
+        #[invariant(forall<i> 0 <= i && i < index@ ==> self@[i] == other@[i])]
+        #[variant(self@.len() - index@)]
+        while index < self.bits.len() {
+            if self.bits[index] != other.bits[index] {
+                return false;
+            }
+            index += 1;
+        }
+        true
+    }
+}
+
+impl Eq for FixedBitSet {}
+
+impl Index<usize> for FixedBitSet {
+    type Output = bool;
+
+    #[ensures(*result == bit_or_false(self@, bit@))]
+    fn index(&self, bit: usize) -> &bool {
+        if self.contains(bit) {
+            &true
+        } else {
+            &false
+        }
+    }
+}
+
+impl<'a> BitAnd for &'a FixedBitSet {
+    type Output = FixedBitSet;
+
+    #[ensures(result@.len() == min_len(self@.len(), other@.len()))]
+    #[ensures(forall<i> 0 <= i && i < result@.len() ==>
+        result@[i] == (self@[i] && other@[i]))]
+    fn bitand(self, other: &FixedBitSet) -> FixedBitSet {
+        if self.bits.len() <= other.bits.len() {
+            let mut result = self.clone();
+            result.intersect_with(other);
+            result
+        } else {
+            let mut result = other.clone();
+            result.intersect_with(self);
+            result
+        }
+    }
+}
+
+impl<'a> BitOr for &'a FixedBitSet {
+    type Output = FixedBitSet;
+
+    #[ensures(result@.len() == max_len(self@.len(), other@.len()))]
+    #[ensures(forall<i> 0 <= i && i < result@.len() ==>
+        result@[i] == (bit_or_false(self@, i) || bit_or_false(other@, i)))]
+    fn bitor(self, other: &FixedBitSet) -> FixedBitSet {
+        let mut result = self.clone();
+        result.union_with(other);
+        result
+    }
+}
+
+impl<'a> BitXor for &'a FixedBitSet {
+    type Output = FixedBitSet;
+
+    #[ensures(result@.len() == max_len(self@.len(), other@.len()))]
+    #[ensures(forall<i> 0 <= i && i < result@.len() ==>
+        result@[i] == (bit_or_false(self@, i) != bit_or_false(other@, i)))]
+    fn bitxor(self, other: &FixedBitSet) -> FixedBitSet {
+        let mut result = self.clone();
+        result.symmetric_difference_with(other);
+        result
+    }
+}
+
+impl BitAndAssign for FixedBitSet {
+    #[ensures((^self)@.len() == self@.len())]
+    #[ensures(forall<i> 0 <= i && i < self@.len() ==>
+        (^self)@[i] == (self@[i] && bit_or_false(other@, i)))]
+    fn bitand_assign(&mut self, other: Self) {
+        self.intersect_with(&other);
+    }
+}
+
+impl BitAndAssign<&Self> for FixedBitSet {
+    #[ensures((^self)@.len() == self@.len())]
+    #[ensures(forall<i> 0 <= i && i < self@.len() ==>
+        (^self)@[i] == (self@[i] && bit_or_false(other@, i)))]
+    fn bitand_assign(&mut self, other: &Self) {
+        self.intersect_with(other);
+    }
+}
+
+impl BitOrAssign for FixedBitSet {
+    #[ensures((^self)@.len() == max_len(self@.len(), other@.len()))]
+    #[ensures(forall<i> 0 <= i && i < (^self)@.len() ==>
+        (^self)@[i] == (bit_or_false(self@, i) || bit_or_false(other@, i)))]
+    fn bitor_assign(&mut self, other: Self) {
+        self.union_with(&other);
+    }
+}
+
+impl BitOrAssign<&Self> for FixedBitSet {
+    #[ensures((^self)@.len() == max_len(self@.len(), other@.len()))]
+    #[ensures(forall<i> 0 <= i && i < (^self)@.len() ==>
+        (^self)@[i] == (bit_or_false(self@, i) || bit_or_false(other@, i)))]
+    fn bitor_assign(&mut self, other: &Self) {
+        self.union_with(other);
+    }
+}
+
+impl BitXorAssign for FixedBitSet {
+    #[ensures((^self)@.len() == max_len(self@.len(), other@.len()))]
+    #[ensures(forall<i> 0 <= i && i < (^self)@.len() ==>
+        (^self)@[i] == (bit_or_false(self@, i) != bit_or_false(other@, i)))]
+    fn bitxor_assign(&mut self, other: Self) {
+        self.symmetric_difference_with(&other);
+    }
+}
+
+impl BitXorAssign<&Self> for FixedBitSet {
+    #[ensures((^self)@.len() == max_len(self@.len(), other@.len()))]
+    #[ensures(forall<i> 0 <= i && i < (^self)@.len() ==>
+        (^self)@[i] == (bit_or_false(self@, i) != bit_or_false(other@, i)))]
+    fn bitxor_assign(&mut self, other: &Self) {
+        self.symmetric_difference_with(other);
     }
 }
