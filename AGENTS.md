@@ -2,15 +2,15 @@
 
 ## Keep verification scoped to the requested crate
 
-Each `crates/<name>/<version>` directory is an independent verification target.
+Each `<name>/<version>` directory is an independent verification target.
 When adding or changing support for a crate, run checks only for the crate named
 in the request unless the user explicitly asks for repository-wide validation.
 
 - Run the target crate's `verify-all.bash` when it exists.
-- Otherwise run `./verify.bash crates/<name>/<version>` from the repository root.
+- Otherwise run `./verify.bash <name>/<version>` from the repository root.
 - Run Cargo commands from the target crate directory or pass its exact
   `--manifest-path`. Do not run workspace-wide or repository-wide Cargo commands.
-- Do not loop over other directories under `crates/`, and do not use failures from
+- Do not loop over other top-level crate directories, and do not use failures from
   other verified crates to judge whether the target crate passes.
 - If a command unexpectedly checks or reports another crate, stop using that
   command and rerun the narrow equivalent for the requested crate. Ignore the
@@ -47,7 +47,7 @@ outside the sandbox and report the proof result from that run.
 ## Follow the playbook for mathematical verification
 
 Before verifying a crate with mathematical, iterative, block-based, modular, or
-bit-level algorithms, read [`docs/verification-playbook.md`](docs/verification-playbook.md).
+bit-level algorithms, read [`.agents/playbooks/verification.md`](.agents/playbooks/verification.md).
 This includes checksums, hashes, cryptography, compression, numeric algorithms,
 and nontrivial encodings.
 

@@ -1,0 +1,13 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+script_dir=$(cd "$(dirname "$0")" && pwd)
+repo_root=$(cd "$script_dir/../.." && pwd)
+cd "$script_dir"
+
+export CARGO_NET_OFFLINE=true
+export CARGO_TARGET_DIR="${CARGO_TARGET_DIR:-$repo_root/target}"
+
+cargo creusot --simple-triggers=false prove
+cargo creusot --simple-triggers=false prove -- --features const_generics
+cargo creusot --simple-triggers=false prove -- --features const_new

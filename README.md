@@ -1,28 +1,28 @@
-# crate-proofs
+# rust-crate-proofs
 
 Experiments in verifying published Rust crates with
 [Creusot](https://github.com/creusot-rs/creusot).
 
-Each directory under `crates/<name>/<version>` is a complete copy of the
+Each `<name>/<version>` directory is a complete copy of the
 published crate with specifications and proof annotations added in place.
 Public APIs and runtime behavior are preserved.
 
 Run proofs with:
 
 ```sh
-./verify.bash crates/adler2/2.0.0
-./verify.bash crates/fnv/1.0.7
-./crates/crc/3.4.0/verify-all.bash
-./crates/arrayvec/0.7.8/verify-all.bash
-./crates/byteorder/1.5.0/verify-all.bash
-./crates/hex/0.4.3/verify-all.bash
-./crates/percent-encoding/2.3.2/verify-all.bash
-./crates/fugit/0.4.0/verify-all.bash
-./crates/cobs/0.5.1/verify-all.bash
-./crates/rustc-hash/2.1.3/verify-all.bash
-./crates/slab/0.4.12/verify-all.bash
-./crates/smallvec/1.15.2/verify-all.bash
-./crates/bytes/1.11.1/verify-all.bash
+./verify.bash adler2/2.0.0
+./verify.bash fnv/1.0.7
+./crc/3.4.0/verify-all.bash
+./arrayvec/0.7.8/verify-all.bash
+./byteorder/1.5.0/verify-all.bash
+./hex/0.4.3/verify-all.bash
+./percent-encoding/2.3.2/verify-all.bash
+./fugit/0.4.0/verify-all.bash
+./cobs/0.5.1/verify-all.bash
+./rustc-hash/2.1.3/verify-all.bash
+./slab/0.4.12/verify-all.bash
+./smallvec/1.15.2/verify-all.bash
+./bytes/1.11.1/verify-all.bash
 ```
 
 `creusot-libs` contains the Creusot libraries pinned at commit
