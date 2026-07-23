@@ -1,5 +1,7 @@
 # arrayvec 0.7.8 provenance and verification scope
 
+**Verification status: structural or narrow proof (partial).**
+
 This source tree was copied from the `arrayvec` 0.7.8 package in the local
 Cargo registry. Its `.cargo_vcs_info.json` records upstream revision
 `0cb664cf505844348538230479b0040b44f3faf1`. Proof annotations, the

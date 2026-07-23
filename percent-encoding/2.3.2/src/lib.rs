@@ -179,7 +179,7 @@ pub fn encoded_byte_model(byte: u8) -> Seq<Int> {
 }
 
 /// Lift a concrete byte sequence into mathematical integers.
-#[logic]
+#[logic(open)]
 #[variant(bytes.len())]
 #[ensures(bytes.len() == 0 ==> result == Seq::empty())]
 #[ensures(bytes.len() == 1 ==> result == Seq::singleton(bytes[0]@))]
@@ -203,7 +203,7 @@ pub fn byte_values_concat(left: Seq<u8>, right: Seq<u8>) {
 }
 
 /// Concatenated byte values of chunks already yielded by an encoder.
-#[logic]
+#[logic(open)]
 #[variant(chunks.len())]
 #[ensures(chunks.len() == 0 ==> result == Seq::empty())]
 #[ensures(chunks.len() == 1 ==>
@@ -229,6 +229,78 @@ pub fn encoded_chunk_values_concat<'a>(left: Seq<&'a str>, right: Seq<&'a str>) 
     }
 }
 
+/// Compose two already-flattened encoder prefixes without exposing iterator
+/// protocol details to the sequence-algebra proof.
+#[logic]
+#[requires(a == encoded_chunk_values(ab).concat(b))]
+#[requires(b == encoded_chunk_values(bc).concat(c))]
+#[ensures(a == encoded_chunk_values(ab.concat(bc)).concat(c))]
+pub fn encoded_chunk_values_trans<'a>(
+    a: Seq<Int>,
+    ab: Seq<&'a str>,
+    b: Seq<Int>,
+    bc: Seq<&'a str>,
+    c: Seq<Int>,
+) {
+    encoded_chunk_values_concat(ab, bc);
+}
+
+/// Concatenating an unescaped prefix contributes that prefix unchanged to the
+/// complete percent-encoding model.
+#[logic]
+#[requires(mask.len() == 4)]
+#[requires(forall<i> 0 <= i && i < prefix.len() ==>
+    !should_encode_model(mask, prefix[i]))]
+#[variant(prefix.len())]
+#[ensures(percent_encode_model(prefix.concat(suffix), mask)
+    == byte_values(prefix).concat(percent_encode_model(suffix, mask)))]
+pub fn percent_encode_unencoded_concat(prefix: Seq<u8>, suffix: Seq<u8>, mask: Seq<u32>) {
+    if prefix.len() > 0 {
+        proof_assert!(!should_encode_model(mask, prefix[0]));
+        proof_assert!(forall<i> 0 <= i && i < prefix.tail().len() ==>
+            prefix.tail()[i] == prefix[i + 1]);
+        proof_assert!(forall<i> 0 <= i && i < prefix.tail().len() ==>
+            !should_encode_model(mask, prefix.tail()[i]));
+        percent_encode_unencoded_concat(prefix.tail(), suffix, mask);
+        proof_assert!(prefix.concat(suffix).tail().len() == prefix.tail().concat(suffix).len());
+        proof_assert!(forall<i> 0 <= i && i < prefix.concat(suffix).tail().len() ==>
+            prefix.concat(suffix).tail()[i] == prefix.tail().concat(suffix)[i]);
+        proof_assert!(prefix.concat(suffix).tail() == prefix.tail().concat(suffix));
+        proof_assert!(percent_encode_model(prefix.concat(suffix), mask)
+        == Seq::singleton(prefix[0]@).concat(
+            percent_encode_model(prefix.tail().concat(suffix), mask),
+        ));
+        proof_assert!(byte_values(prefix)
+            == Seq::singleton(prefix[0]@).concat(byte_values(prefix.tail())));
+        proof_assert!(forall<x: Seq<Int>, y: Seq<Int>, z: Seq<Int>>
+            x.concat(y.concat(z)) == x.concat(y).concat(z));
+        proof_assert!(Seq::singleton(prefix[0]@).concat(
+            byte_values(prefix.tail()).concat(percent_encode_model(suffix, mask)),
+        ) == Seq::singleton(prefix[0]@).concat(byte_values(prefix.tail()))
+            .concat(percent_encode_model(suffix, mask)));
+        proof_assert!(percent_encode_model(prefix.concat(suffix), mask)
+        == Seq::singleton(prefix[0]@).concat(
+            byte_values(prefix.tail()).concat(percent_encode_model(suffix, mask)),
+        ));
+        proof_assert!(byte_values(prefix).concat(percent_encode_model(suffix, mask))
+        == Seq::singleton(prefix[0]@).concat(
+            byte_values(prefix.tail()).concat(percent_encode_model(suffix, mask)),
+        ));
+    } else {
+        proof_assert!(prefix == Seq::empty());
+        proof_assert!(prefix.concat(suffix) == suffix);
+        proof_assert!(byte_values(prefix) == Seq::empty());
+        proof_assert!(
+            Seq::<Int>::empty().concat(percent_encode_model(suffix, mask))
+                == percent_encode_model(suffix, mask)
+        );
+        proof_assert!(
+            percent_encode_model(prefix.concat(suffix), mask)
+                == byte_values(prefix).concat(percent_encode_model(suffix, mask))
+        );
+    }
+}
+
 #[logic(open)]
 #[requires(mask.len() == 4)]
 pub fn should_encode_model(mask: Seq<u32>, byte: u8) -> bool {
@@ -236,7 +308,7 @@ pub fn should_encode_model(mask: Seq<u32>, byte: u8) -> bool {
 }
 
 /// Complete percent encoding of an input byte sequence.
-#[logic]
+#[logic(open)]
 #[requires(mask.len() == 4)]
 #[variant(bytes.len())]
 #[ensures(forall<i> 0 <= i && i < result.len() ==> 0 <= result[i] && result[i] < 0x80)]
@@ -783,7 +855,7 @@ impl PercentEncode<'_> {
 }
 
 impl<'a> IteratorSpec for PercentEncode<'a> {
-    #[logic(open, prophetic)]
+    #[logic(open, prophetic, inline)]
     fn produces(self, visited: Seq<Self::Item>, tail: Self) -> bool {
         pearlite! { self@ == encoded_chunk_values(visited).concat(tail@) }
     }
@@ -801,23 +873,47 @@ impl<'a> IteratorSpec for PercentEncode<'a> {
     }
 
     #[logic(open, law)]
-    #[creusot_std::prelude::trusted]
     #[requires(a.produces(ab, b))]
     #[requires(b.produces(bc, c))]
     #[ensures(a.produces(ab.concat(bc), c))]
     fn produces_trans(a: Self, ab: Seq<Self::Item>, b: Self, bc: Seq<Self::Item>, c: Self) {
-        encoded_chunk_values_concat(ab, bc);
-        proof_assert!(forall<i> 0 <= i && i < bc.len()
-            ==> bc[i] == ab.concat(bc)[ab.len() + i]);
-        proof_assert!(a@ == encoded_chunk_values(ab).concat(b@));
-        proof_assert!(b@ == encoded_chunk_values(bc).concat(c@));
-        proof_assert!(a@ == encoded_chunk_values(ab).concat(
-            encoded_chunk_values(bc).concat(c@)));
-        proof_assert!(encoded_chunk_values(ab).concat(encoded_chunk_values(bc).concat(c@))
-            == encoded_chunk_values(ab).concat(encoded_chunk_values(bc)).concat(c@));
-        proof_assert!(a@ == encoded_chunk_values(ab.concat(bc)).concat(c@));
-        proof_assert!(a.produces(ab.concat(bc), c))
+        encoded_chunk_values_trans(a.view(), ab, b.view(), bc, c.view());
     }
+}
+
+/// Length of the maximal leading byte run that does not require encoding.
+/// The first byte is required to belong to that run.
+#[cfg(creusot)]
+#[requires(bytes@.len() > 0)]
+#[requires(!should_encode_model(ascii_set@, bytes@[0]))]
+#[ensures(1 <= result@ && result@ <= bytes@.len())]
+#[ensures(forall<i> 0 <= i && i < result@ ==>
+    !should_encode_model(ascii_set@, bytes@[i]))]
+#[ensures(result@ == bytes@.len() || should_encode_model(ascii_set@, bytes@[result@]))]
+fn unchanged_prefix_len_verified(bytes: &[u8], ascii_set: &AsciiSet) -> usize {
+    let mut index = 1usize;
+    #[invariant(1 <= index@ && index@ <= bytes@.len())]
+    #[invariant(forall<i> 0 <= i && i < index@ ==>
+        !should_encode_model(ascii_set@, bytes@[i]))]
+    while index < bytes.len() {
+        let byte = bytes[index];
+        if ascii_set.should_percent_encode(byte) {
+            return index;
+        }
+        proof_assert!(!should_encode_model(ascii_set@, byte));
+        index += 1;
+    }
+    index
+}
+
+/// Verification bridge for the standard-library fact that every ASCII byte
+/// slice is valid UTF-8. The maximal-prefix search itself is body-proved.
+#[cfg(creusot)]
+#[creusot_std::prelude::trusted]
+#[requires(forall<i> 0 <= i && i < bytes@.len() ==> bytes@[i]@ < 0x80)]
+#[ensures(byte_values(result@.to_bytes()) == byte_values(bytes@))]
+fn ascii_slice_as_str(bytes: &[u8]) -> &str {
+    unsafe { str::from_utf8_unchecked(bytes) }
 }
 
 impl<'a> Iterator for PercentEncode<'a> {
@@ -827,60 +923,53 @@ impl<'a> Iterator for PercentEncode<'a> {
         None => resolve(self) && self@ == Seq::empty(),
         Some(chunk) => self@ == byte_values(chunk@.to_bytes()).concat((^self)@),
     })]
-    #[creusot_std::prelude::trusted]
     fn next(&mut self) -> Option<&'a str> {
         if let Some((&first_byte, remaining)) = self.bytes.split_first() {
             if self.ascii_set.should_percent_encode(first_byte) {
                 self.bytes = remaining;
                 Some(percent_encode_byte(first_byte))
             } else {
-                // The unsafe blocks here are appropriate because the bytes are
-                // confirmed as a subset of UTF-8 in should_percent_encode.
-                let mut i = 0usize;
-                proof_assert!(!should_encode_model(self.ascii_set@, first_byte));
-                proof_assert!(self@ == byte_values(self.bytes@.subsequence(0, 1)).concat(
-                    percent_encode_model(remaining@, self.ascii_set@)));
-                #[invariant(i@ <= remaining@.len())]
-                #[invariant(self.bytes@ == Seq::singleton(first_byte).concat(remaining@))]
-                #[invariant(forall<j> 0 <= j && j < i@ ==>
-                    !should_encode_model(self.ascii_set@, remaining@[j]))]
-                #[invariant(self@ == byte_values(self.bytes@.subsequence(0, i@ + 1)).concat(
-                    percent_encode_model(
-                        remaining@.subsequence(i@, remaining@.len()),
-                        self.ascii_set@,
-                    )))]
-                while i < remaining.len() {
-                    let byte = remaining[i];
-                    if self.ascii_set.should_percent_encode(byte) {
-                        // 1 for first_byte + i for previous iterations of this loop
-                        let (unchanged_slice, remaining) = self.bytes.split_at(1 + i);
-                        self.bytes = remaining;
-                        return Some(unsafe { str::from_utf8_unchecked(unchanged_slice) });
-                    }
-                    let _i_before = snapshot!(i);
-                    proof_assert!(!should_encode_model(self.ascii_set@, byte));
-                    proof_assert!(remaining@.subsequence((*_i_before)@, remaining@.len())
-                    == Seq::singleton(byte).concat(remaining@.subsequence(
-                        (*_i_before)@ + 1,
-                        remaining@.len(),
-                    )));
-                    proof_assert!(percent_encode_model(
-                        remaining@.subsequence((*_i_before)@, remaining@.len()),
-                        self.ascii_set@,
-                    ) == Seq::singleton(byte@).concat(percent_encode_model(
-                        remaining@.subsequence((*_i_before)@ + 1, remaining@.len()),
-                        self.ascii_set@,
-                    )));
-                    i += 1;
-                    proof_assert!(self@ == byte_values(self.bytes@.subsequence(0, i@ + 1)).concat(
-                    percent_encode_model(
-                        remaining@.subsequence(i@, remaining@.len()),
-                        self.ascii_set@,
-                    )));
+                #[cfg(creusot)]
+                {
+                    let prefix_len = unchanged_prefix_len_verified(self.bytes, self.ascii_set);
+                    let old_view = snapshot!(self@);
+                    let (unchanged_slice, remaining) = self.bytes.split_at(prefix_len);
+                    proof_assert!(self.bytes@ == unchanged_slice@.concat(remaining@));
+                    proof_assert!(forall<i> 0 <= i && i < unchanged_slice@.len() ==>
+                        !should_encode_model(self.ascii_set@, unchanged_slice@[i]));
+                    proof_assert! {
+                        percent_encode_unencoded_concat(
+                            unchanged_slice@,
+                            remaining@,
+                            self.ascii_set@,
+                        );
+                        *old_view == byte_values(unchanged_slice@).concat(
+                            percent_encode_model(remaining@, self.ascii_set@),
+                        )
+                    };
+                    self.bytes = remaining;
+                    return Some(ascii_slice_as_str(unchanged_slice));
                 }
-                let unchanged_slice = self.bytes;
-                self.bytes = &[];
-                Some(unsafe { str::from_utf8_unchecked(unchanged_slice) })
+
+                #[cfg(not(creusot))]
+                {
+                    // The unsafe blocks here are appropriate because the bytes are
+                    // confirmed as a subset of UTF-8 in should_percent_encode.
+                    let mut i = 0usize;
+                    while i < remaining.len() {
+                        let byte = remaining[i];
+                        if self.ascii_set.should_percent_encode(byte) {
+                            // 1 for first_byte + i for previous iterations of this loop
+                            let (unchanged_slice, remaining) = self.bytes.split_at(1 + i);
+                            self.bytes = remaining;
+                            return Some(unsafe { str::from_utf8_unchecked(unchanged_slice) });
+                        }
+                        i += 1;
+                    }
+                    let unchanged_slice = self.bytes;
+                    self.bytes = &[];
+                    Some(unsafe { str::from_utf8_unchecked(unchanged_slice) })
+                }
             }
         } else {
             None
@@ -1032,7 +1121,7 @@ impl PercentDecode<'_> {
 }
 
 impl<'a> IteratorSpec for PercentDecode<'a> {
-    #[logic(open, prophetic)]
+    #[logic(open, prophetic, inline)]
     fn produces(self, visited: Seq<Self::Item>, tail: Self) -> bool {
         pearlite! { self@ == byte_values(visited).concat(tail@) }
     }
@@ -1050,7 +1139,6 @@ impl<'a> IteratorSpec for PercentDecode<'a> {
     }
 
     #[logic(open, law)]
-    #[creusot_std::prelude::trusted]
     #[requires(a.produces(ab, b))]
     #[requires(b.produces(bc, c))]
     #[ensures(a.produces(ab.concat(bc), c))]

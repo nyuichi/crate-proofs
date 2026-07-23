@@ -1,5 +1,7 @@
 # cobs 0.5.1 provenance and verification scope
 
+**Verification status: strong functional core (partial).**
+
 This source tree is copied from the crate published on crates.io as `cobs`
 version `0.5.1`. The published archive has SHA-256 checksum
 `dd93fd2c1b27acd030440c9dbd9d14c1122aad622374fe05a670b67a4bc034be`.

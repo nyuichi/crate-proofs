@@ -1,5 +1,7 @@
 # fugit 0.4.0 provenance and verification scope
 
+**Verification status: strong functional core (partial).**
+
 This source tree is copied from the crate published on crates.io as `fugit`
 version `0.4.0`. Its `.cargo_vcs_info.json` records upstream revision
 `2df7c5d44aa8f32ad6fbcb1f15feb0cc877573e5`.

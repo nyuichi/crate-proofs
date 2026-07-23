@@ -1,5 +1,7 @@
 # semver 1.0.28 provenance and verification scope
 
+**Verification status: substantial public subset (partial).**
+
 This source tree is copied from the crate published on crates.io as `semver`
 version `1.0.28`. The published archive has SHA-256 checksum
 `8a7852d02fc848982e0c167ef163aaff9cd91dc640ba85e263cb1ce46fae51cd`.

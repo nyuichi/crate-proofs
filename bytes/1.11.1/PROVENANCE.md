@@ -1,5 +1,7 @@
 # bytes 1.11.1 provenance and verification scope
 
+**Verification status: structural or narrow proof (partial).**
+
 This source tree is copied from the crate published on crates.io as `bytes`
 version `1.11.1`. The published archive has SHA-256 checksum
 `1e748733b7cbc798e1434b6ac524f0c1ff2ab456fe201501e6497c8417a4fc33`.

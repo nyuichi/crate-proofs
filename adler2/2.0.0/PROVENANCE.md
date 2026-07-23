@@ -1,5 +1,7 @@
 # adler2 2.0.0 provenance
 
+**Verification status: structural or narrow proof (partial).**
+
 This source tree is copied from the official upstream repository at the immutable
 revision `baf8ce8cfa012e9c1f1ed8f6e5111bf8f8fd0227`:
 

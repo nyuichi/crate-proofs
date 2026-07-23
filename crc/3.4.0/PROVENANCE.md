@@ -1,5 +1,7 @@
 # crc 3.4.0 provenance
 
+**Verification status: strong functional core (partial).**
+
 This source tree is copied from the crate published on crates.io as `crc`
 version `3.4.0`. The published archive has SHA-256 checksum
 `5eb8a2a1cd12ab0d987a5d5e825195d372001a4094a0376319d5a0ad71c1ba0d`.

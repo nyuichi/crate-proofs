@@ -5,7 +5,8 @@ use creusot_std::invariant::inv;
 use creusot_std::prelude::{ensures, logic, pearlite, trusted, DeepModel, Invariant, View};
 
 /// The error type for decoding a hex string into `Vec<u8>` or `[u8; N]`.
-#[derive(Debug, Clone, Copy, DeepModel)]
+#[cfg_attr(not(creusot), derive(Debug))]
+#[derive(Clone, Copy, DeepModel)]
 pub enum FromHexError {
     /// An invalid character was found. Valid ones are: `0...9`, `a...f`
     /// or `A...F`.
@@ -19,6 +20,29 @@ pub enum FromHexError {
     /// array, the hex string's length * 2 has to match the container's
     /// length.
     InvalidStringLength,
+}
+
+// The ordinary build keeps the upstream derived representation. Creusot does
+// not model mutation through `fmt::Formatter`, so the equivalent formatting
+// body is an explicit integration boundary in the verification build.
+#[cfg(creusot)]
+impl fmt::Debug for FromHexError {
+    #[trusted]
+    #[ensures(creusot_std::std::fmt::formatter_extends(
+        f.deep_model(),
+        (^f).deep_model(),
+    ))]
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            FromHexError::InvalidHexCharacter { c, index } => f
+                .debug_struct("InvalidHexCharacter")
+                .field("c", c)
+                .field("index", index)
+                .finish(),
+            FromHexError::OddLength => f.write_str("OddLength"),
+            FromHexError::InvalidStringLength => f.write_str("InvalidStringLength"),
+        }
+    }
 }
 
 impl PartialEq for FromHexError {

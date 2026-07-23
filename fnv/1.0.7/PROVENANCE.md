@@ -1,5 +1,7 @@
 # fnv 1.0.7 provenance
 
+**Verification status: complete.**
+
 This source tree is copied from the crate published on crates.io as `fnv`
 version `1.0.7`. The published archive has SHA-256 checksum
 `3f9eec918d3f24069decb9af1554cad7c880e2da24a9afd88aca000531ab82c1`.
@@ -28,5 +30,20 @@ clients to use every operational contract. The standard-library hash map and
 hash set names are type aliases rather than new nominal types and contain no
 fnv implementation of their own.
 
+## Completion status
+
+This is a complete functional proof of every crate-owned executable public API.
+There are no `#[trusted]` declarations. `FnvBuildHasher`, `FnvHashMap`, and
+`FnvHashSet` are type aliases to standard-library generic types and introduce no
+additional implementation body in this crate.
+
+`./verify-all.bash` checks both supported feature configurations:
+
+- `--no-default-features` (`no_std`);
+- `--all-features` (default `std`).
+
+Both configurations prove 8 files. The upstream test vector passes in both;
+the std configuration additionally passes 2 documentation tests.
+
 Generated Why3 and Cargo build artifacts are intentionally not tracked. Run
-the repository's `verify.bash` script to regenerate and check them.
+`./verify-all.bash` to regenerate and check them.

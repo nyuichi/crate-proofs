@@ -1,5 +1,7 @@
 # bstr 1.13.0 provenance and verification scope
 
+**Verification status: structural or narrow proof (partial).**
+
 This source tree is copied from the crate published on crates.io as `bstr`
 version `1.13.0`. The published archive has SHA-256 checksum
 `1f7dc094d718f2e1c1559ad110e27eeaae14a5465d3d56dd6dbd793079fbd530`.

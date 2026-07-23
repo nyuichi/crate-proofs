@@ -1,5 +1,7 @@
 # smallvec 1.15.2 provenance and verification scope
 
+**Verification status: structural or narrow proof (partial).**
+
 This source tree was copied from the `smallvec` 1.15.2 package in the local
 Cargo registry. Its `.cargo_vcs_info.json` records upstream revision
 `c469051a1ba05ef1a03dd69e14b4a5aa329e6f10`. Proof annotations, the

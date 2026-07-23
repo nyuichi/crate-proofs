@@ -24,7 +24,9 @@
 extern crate creusot_std;
 
 #[allow(unused_imports)]
-use creusot_std::prelude::{ensures, logic, pearlite, trusted, Invariant, View};
+use creusot_std::prelude::{
+    ensures, invariant, logic, pearlite, proof_assert, requires, Invariant, View,
+};
 
 #[cfg(creusot)]
 pub mod model;
@@ -225,8 +227,6 @@ impl Hasher for FxHasher {
     }
 
     #[inline]
-    #[trusted]
-    // TODO: remove this boundary once Creusot specifies rotate_left for usize.
     #[ensures(result == model::finish_model(self@))]
     fn finish(&self) -> u64 {
         // Since we used a multiplicative hash our top bits have the most
@@ -238,12 +238,29 @@ impl Hasher for FxHasher {
         // entropy up until 2^26 table sizes. On 32-bit hosts we'll dial it
         // back down a bit to 15 bits.
 
-        #[cfg(target_pointer_width = "64")]
+        #[cfg(all(not(creusot), target_pointer_width = "64"))]
         const ROTATE: u32 = 26;
-        #[cfg(target_pointer_width = "32")]
+        #[cfg(all(not(creusot), target_pointer_width = "32"))]
         const ROTATE: u32 = 15;
 
-        self.hash.rotate_left(ROTATE) as u64
+        #[cfg(not(creusot))]
+        {
+            self.hash.rotate_left(ROTATE) as u64
+        }
+
+        #[cfg(creusot)]
+        {
+            // Equivalent spelling used because Creusot does not yet specify
+            // the primitive rotate operation.
+            #[cfg(target_pointer_width = "64")]
+            {
+                ((self.hash << 26) | (self.hash >> 38)) as u64
+            }
+            #[cfg(target_pointer_width = "32")]
+            {
+                ((self.hash << 15) | (self.hash >> 17)) as u64
+            }
+        }
 
         // A bit reversal would be even better, except hashbrown also expects
         // good entropy in the top 7 bits and a bit reverse would fill those
@@ -335,24 +352,103 @@ fn multiply_mix(x: u64, y: u64) -> u64 {
 /// We don't bother avalanching here as we'll feed this hash into a
 /// multiplication after which we take the high bits, which avalanches for us.
 #[inline]
-#[trusted]
-// TODO: remove this boundary after proving slice-to-array decoding and the
-// 16-byte bulk loop refine `model::hash_bytes_model`.
 #[ensures(exists<len_word: u64> len_word@ == bytes@.len()
     && result == model::hash_bytes_model(bytes@, len_word))]
 fn hash_bytes(bytes: &[u8]) -> u64 {
+    #[cfg(creusot)]
+    {
+        return hash_bytes_verified(bytes);
+    }
+
+    #[cfg(not(creusot))]
+    {
+        let len = bytes.len();
+        let mut s0 = SEED1;
+        let mut s1 = SEED2;
+
+        if len <= 16 {
+            // XOR the input into s0, s1.
+            if len >= 8 {
+                s0 ^= u64::from_le_bytes(bytes[0..8].try_into().unwrap());
+                s1 ^= u64::from_le_bytes(bytes[len - 8..].try_into().unwrap());
+            } else if len >= 4 {
+                s0 ^= u32::from_le_bytes(bytes[0..4].try_into().unwrap()) as u64;
+                s1 ^= u32::from_le_bytes(bytes[len - 4..].try_into().unwrap()) as u64;
+            } else if len > 0 {
+                let lo = bytes[0];
+                let mid = bytes[len / 2];
+                let hi = bytes[len - 1];
+                s0 ^= lo as u64;
+                s1 ^= ((hi as u64) << 8) | mid as u64;
+            }
+        } else {
+            // Handle bulk (can partially overlap with suffix).
+            let mut bulk = &bytes[..(len - 1)];
+            while let Some((chunk, rest)) = bulk.split_first_chunk::<16>() {
+                let x = u64::from_le_bytes((&chunk[..8]).try_into().unwrap());
+                let y = u64::from_le_bytes((&chunk[8..]).try_into().unwrap());
+
+                // Replace s1 with a mix of s0, x, and y, and s0 with s1.
+                // This ensures the compiler can unroll this loop into two
+                // independent streams, one operating on s0, the other on s1.
+                //
+                // Since zeroes are a common input we prevent an immediate trivial
+                // collapse of the hash function by XOR'ing a constant with y.
+                let t = multiply_mix(s0 ^ x, PREVENT_TRIVIAL_ZERO_COLLAPSE ^ y);
+                s0 = s1;
+                s1 = t;
+                bulk = rest;
+            }
+
+            let suffix = &bytes[len - 16..];
+            s0 ^= u64::from_le_bytes(suffix[0..8].try_into().unwrap());
+            s1 ^= u64::from_le_bytes(suffix[8..16].try_into().unwrap());
+        }
+
+        multiply_mix(s0, s1) ^ (len as u64)
+    }
+}
+
+#[cfg(creusot)]
+#[requires(start@ + 8 <= bytes@.len())]
+#[ensures(result == model::read_u64_le(bytes@, start@))]
+fn read_u64_le_verified(bytes: &[u8], start: usize) -> u64 {
+    (bytes[start] as u64)
+        | ((bytes[start + 1] as u64) << 8)
+        | ((bytes[start + 2] as u64) << 16)
+        | ((bytes[start + 3] as u64) << 24)
+        | ((bytes[start + 4] as u64) << 32)
+        | ((bytes[start + 5] as u64) << 40)
+        | ((bytes[start + 6] as u64) << 48)
+        | ((bytes[start + 7] as u64) << 56)
+}
+
+#[cfg(creusot)]
+#[requires(start@ + 4 <= bytes@.len())]
+#[ensures(result == model::read_u32_le(bytes@, start@))]
+fn read_u32_le_verified(bytes: &[u8], start: usize) -> u32 {
+    (bytes[start] as u32)
+        | ((bytes[start + 1] as u32) << 8)
+        | ((bytes[start + 2] as u32) << 16)
+        | ((bytes[start + 3] as u32) << 24)
+}
+
+#[cfg(creusot)]
+#[ensures(exists<len_word: u64> len_word@ == bytes@.len()
+    && result == model::hash_bytes_model(bytes@, len_word))]
+fn hash_bytes_verified(bytes: &[u8]) -> u64 {
     let len = bytes.len();
+    let len_word = len as u64;
     let mut s0 = SEED1;
     let mut s1 = SEED2;
 
     if len <= 16 {
-        // XOR the input into s0, s1.
         if len >= 8 {
-            s0 ^= u64::from_le_bytes(bytes[0..8].try_into().unwrap());
-            s1 ^= u64::from_le_bytes(bytes[len - 8..].try_into().unwrap());
+            s0 ^= read_u64_le_verified(bytes, 0);
+            s1 ^= read_u64_le_verified(bytes, len - 8);
         } else if len >= 4 {
-            s0 ^= u32::from_le_bytes(bytes[0..4].try_into().unwrap()) as u64;
-            s1 ^= u32::from_le_bytes(bytes[len - 4..].try_into().unwrap()) as u64;
+            s0 ^= read_u32_le_verified(bytes, 0) as u64;
+            s1 ^= read_u32_le_verified(bytes, len - 4) as u64;
         } else if len > 0 {
             let lo = bytes[0];
             let mid = bytes[len / 2];
@@ -361,30 +457,53 @@ fn hash_bytes(bytes: &[u8]) -> u64 {
             s1 ^= ((hi as u64) << 8) | mid as u64;
         }
     } else {
-        // Handle bulk (can partially overlap with suffix).
-        let mut bulk = &bytes[..(len - 1)];
-        while let Some((chunk, rest)) = bulk.split_first_chunk::<16>() {
-            let x = u64::from_le_bytes((&chunk[..8]).try_into().unwrap());
-            let y = u64::from_le_bytes((&chunk[8..]).try_into().unwrap());
-
-            // Replace s1 with a mix of s0, x, and y, and s0 with s1.
-            // This ensures the compiler can unroll this loop into two
-            // independent streams, one operating on s0, the other on s1.
-            //
-            // Since zeroes are a common input we prevent an immediate trivial
-            // collapse of the hash function by XOR'ing a constant with y.
+        let block_count = (len - 1) / 16;
+        let mut block = 0usize;
+        proof_assert! {
+            model::bulk_fold_zero(
+                bytes@,
+                (model::MODEL_SEED1, model::MODEL_SEED2),
+            );
+            model::bulk_fold(
+                bytes@,
+                0,
+                (model::MODEL_SEED1, model::MODEL_SEED2),
+            ) == (model::MODEL_SEED1, model::MODEL_SEED2)
+        };
+        #[invariant(block@ <= block_count@)]
+        #[invariant(block_count@ * 16 <= bytes@.len() - 1)]
+        #[invariant((s0, s1) == model::bulk_fold(
+            bytes@,
+            block@,
+            (model::MODEL_SEED1, model::MODEL_SEED2),
+        ))]
+        while block < block_count {
+            let start = block * 16;
+            proof_assert! {
+                model::bulk_fold_succ(
+                    bytes@,
+                    block@,
+                    (model::MODEL_SEED1, model::MODEL_SEED2),
+                );
+                model::bulk_fold(
+                    bytes@,
+                    block@ + 1,
+                    (model::MODEL_SEED1, model::MODEL_SEED2),
+                ) == model::bulk_step(bytes@, block@ * 16, (s0, s1))
+            };
+            let x = read_u64_le_verified(bytes, start);
+            let y = read_u64_le_verified(bytes, start + 8);
             let t = multiply_mix(s0 ^ x, PREVENT_TRIVIAL_ZERO_COLLAPSE ^ y);
             s0 = s1;
             s1 = t;
-            bulk = rest;
+            block += 1;
         }
 
-        let suffix = &bytes[len - 16..];
-        s0 ^= u64::from_le_bytes(suffix[0..8].try_into().unwrap());
-        s1 ^= u64::from_le_bytes(suffix[8..16].try_into().unwrap());
+        s0 ^= read_u64_le_verified(bytes, len - 16);
+        s1 ^= read_u64_le_verified(bytes, len - 8);
     }
 
-    multiply_mix(s0, s1) ^ (len as u64)
+    multiply_mix(s0, s1) ^ len_word
 }
 
 /// An implementation of [`BuildHasher`] that produces [`FxHasher`]s.

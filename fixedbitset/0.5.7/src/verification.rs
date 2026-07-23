@@ -3,19 +3,231 @@
 extern crate alloc;
 
 use alloc::{vec, vec::Vec};
+use core::ops::{Range, RangeFrom, RangeFull, RangeTo};
 #[allow(unused_imports)]
 use creusot_std::prelude::{
-    ensures, invariant, logic, pearlite, requires, snapshot, variant, DeepModel, Int, Invariant,
-    Seq, View,
+    ensures, invariant, logic, pearlite, proof_assert, requires, snapshot, variant, DeepModel, Int,
+    Invariant, Seq, View,
 };
 
 /// Storage block exposed by the upstream API.
 pub type Block = usize;
 
+/// Built-in range syntax accepted by the upstream API.
+pub trait IndexRange<T = usize> {
+    #[logic]
+    fn range_start(&self) -> Int;
+
+    #[logic]
+    fn range_end(&self, length: Int) -> Int;
+
+    fn start(&self) -> Option<T> {
+        None
+    }
+
+    fn end(&self) -> Option<T> {
+        None
+    }
+
+    #[requires(self.range_start() <= self.range_end(length@))]
+    #[requires(self.range_end(length@) <= length@)]
+    #[ensures(result.0@ == self.range_start())]
+    #[ensures(result.1@ == self.range_end(length@))]
+    fn bounds(&self, length: usize) -> (usize, usize);
+}
+
+impl IndexRange<usize> for RangeFull {
+    #[logic(open)]
+    fn range_start(&self) -> Int {
+        0
+    }
+
+    #[logic(open)]
+    fn range_end(&self, length: Int) -> Int {
+        length
+    }
+
+    #[requires(self.range_start() <= self.range_end(length@))]
+    #[requires(self.range_end(length@) <= length@)]
+    #[ensures(result.0@ == self.range_start())]
+    #[ensures(result.1@ == self.range_end(length@))]
+    fn bounds(&self, length: usize) -> (usize, usize) {
+        (0, length)
+    }
+}
+
+impl IndexRange<usize> for RangeFrom<usize> {
+    #[logic(open)]
+    fn range_start(&self) -> Int {
+        pearlite! { self.start@ }
+    }
+
+    #[logic(open)]
+    fn range_end(&self, length: Int) -> Int {
+        length
+    }
+
+    fn start(&self) -> Option<usize> {
+        Some(self.start)
+    }
+
+    #[requires(self.range_start() <= self.range_end(length@))]
+    #[requires(self.range_end(length@) <= length@)]
+    #[ensures(result.0@ == self.range_start())]
+    #[ensures(result.1@ == self.range_end(length@))]
+    fn bounds(&self, length: usize) -> (usize, usize) {
+        (self.start, length)
+    }
+}
+
+impl IndexRange<usize> for RangeTo<usize> {
+    #[logic(open)]
+    fn range_start(&self) -> Int {
+        0
+    }
+
+    #[logic(open)]
+    fn range_end(&self, _length: Int) -> Int {
+        pearlite! { self.end@ }
+    }
+
+    fn end(&self) -> Option<usize> {
+        Some(self.end)
+    }
+
+    #[requires(self.range_start() <= self.range_end(length@))]
+    #[requires(self.range_end(length@) <= length@)]
+    #[ensures(result.0@ == self.range_start())]
+    #[ensures(result.1@ == self.range_end(length@))]
+    fn bounds(&self, length: usize) -> (usize, usize) {
+        let _ = length;
+        (0, self.end)
+    }
+}
+
+impl IndexRange<usize> for Range<usize> {
+    #[logic(open)]
+    fn range_start(&self) -> Int {
+        pearlite! { self.start@ }
+    }
+
+    #[logic(open)]
+    fn range_end(&self, _length: Int) -> Int {
+        pearlite! { self.end@ }
+    }
+
+    fn start(&self) -> Option<usize> {
+        Some(self.start)
+    }
+
+    fn end(&self) -> Option<usize> {
+        Some(self.end)
+    }
+
+    #[requires(self.range_start() <= self.range_end(length@))]
+    #[requires(self.range_end(length@) <= length@)]
+    #[ensures(result.0@ == self.range_start())]
+    #[ensures(result.1@ == self.range_end(length@))]
+    fn bounds(&self, length: usize) -> (usize, usize) {
+        let _ = length;
+        (self.start, self.end)
+    }
+}
+
 /// A fixed-length sequence of Boolean bits.
 pub struct FixedBitSet {
     bits: Vec<bool>,
 }
+
+/// Read one logical bit, extending a finite bitset with disabled bits.
+#[logic(open)]
+pub fn bit_or_false(bits: Seq<bool>, index: Int) -> bool {
+    pearlite! { if 0 <= index && index < bits.len() { bits[index] } else { false } }
+}
+
+/// Length of a union-shaped result.
+#[logic(open)]
+pub fn max_len(left: Int, right: Int) -> Int {
+    pearlite! { if left >= right { left } else { right } }
+}
+
+/// Select one of union, intersection, difference, or symmetric difference.
+#[logic(open)]
+pub fn combine_bits(left: bool, right: bool, mode: u8) -> bool {
+    pearlite! {
+        if mode == 0u8 {
+            left || right
+        } else if mode == 1u8 {
+            left && right
+        } else if mode == 2u8 {
+            left && !right
+        } else {
+            left != right
+        }
+    }
+}
+
+/// Count selected bits in the first `count` positions of two zero-extended
+/// finite bitsets.
+#[logic]
+#[requires(0 <= count)]
+#[variant(count)]
+pub fn binary_count(left: Seq<bool>, right: Seq<bool>, count: Int, mode: u8) -> Int {
+    if count == 0 {
+        0
+    } else {
+        pearlite! {
+            binary_count(left, right, count - 1, mode)
+                + if combine_bits(
+                    bit_or_false(left, count - 1),
+                    bit_or_false(right, count - 1),
+                    mode,
+                ) { 1 } else { 0 }
+        }
+    }
+}
+
+/// Count bits equal to `enabled` in `[start, end)`.
+#[logic]
+#[requires(0 <= start && start <= end && end <= bits.len())]
+#[variant(end - start)]
+pub fn range_count(bits: Seq<bool>, start: Int, end: Int, enabled: bool) -> Int {
+    if start == end {
+        0
+    } else {
+        pearlite! {
+            (if bits[start] == enabled { 1 } else { 0 })
+                + range_count(bits, start + 1, end, enabled)
+        }
+    }
+}
+
+#[logic]
+#[requires(0 <= start && start <= index && index < end && end <= bits.len())]
+#[variant(index - start)]
+#[ensures(range_count(bits, start, index + 1, enabled)
+    == range_count(bits, start, index, enabled)
+        + if bits[index] == enabled { 1 } else { 0 })]
+fn range_count_succ(bits: Seq<bool>, start: Int, index: Int, end: Int, enabled: bool) {
+    if start < index {
+        range_count_succ(bits, start + 1, index, end, enabled);
+    }
+}
+
+#[logic]
+#[ensures(binary_count(left, right, 0, mode) == 0)]
+fn binary_count_zero(left: Seq<bool>, right: Seq<bool>, mode: u8) {}
+
+#[logic]
+#[requires(0 <= count)]
+#[ensures(binary_count(left, right, count + 1, mode)
+    == binary_count(left, right, count, mode)
+        + if combine_bits(bit_or_false(left, count), bit_or_false(right, count), mode) {
+            1
+        } else {
+            0
+        })]
+fn binary_count_succ(left: Seq<bool>, right: Seq<bool>, count: Int, mode: u8) {}
 
 impl View for FixedBitSet {
     type ViewTy = Seq<bool>;
@@ -59,6 +271,80 @@ impl FixedBitSet {
     #[ensures(result == (self@.len() == 0))]
     pub fn is_empty(&self) -> bool {
         self.bits.len() == 0
+    }
+
+    /// Return whether every bit is disabled.
+    #[ensures(result == (forall<i> 0 <= i && i < self@.len() ==> self@[i] == false))]
+    pub fn is_clear(&self) -> bool {
+        let mut index = 0usize;
+        #[invariant(index@ <= self@.len())]
+        #[invariant(forall<i> 0 <= i && i < index@ ==> self@[i] == false)]
+        #[variant(self@.len() - index@)]
+        while index < self.bits.len() {
+            if self.bits[index] {
+                return false;
+            }
+            index += 1;
+        }
+        true
+    }
+
+    /// Return whether every bit is enabled.
+    #[ensures(result == (forall<i> 0 <= i && i < self@.len() ==> self@[i] == true))]
+    pub fn is_full(&self) -> bool {
+        let mut index = 0usize;
+        #[invariant(index@ <= self@.len())]
+        #[invariant(forall<i> 0 <= i && i < index@ ==> self@[i] == true)]
+        #[variant(self@.len() - index@)]
+        while index < self.bits.len() {
+            if !self.bits[index] {
+                return false;
+            }
+            index += 1;
+        }
+        true
+    }
+
+    /// Find the least enabled bit.
+    #[ensures(match result {
+        None => forall<i> 0 <= i && i < self@.len() ==> self@[i] == false,
+        Some(index) => index@ < self@.len()
+            && self@[index@] == true
+            && (forall<i> 0 <= i && i < index@ ==> self@[i] == false),
+    })]
+    pub fn minimum(&self) -> Option<usize> {
+        let mut index = 0usize;
+        #[invariant(index@ <= self@.len())]
+        #[invariant(forall<i> 0 <= i && i < index@ ==> self@[i] == false)]
+        #[variant(self@.len() - index@)]
+        while index < self.bits.len() {
+            if self.bits[index] {
+                return Some(index);
+            }
+            index += 1;
+        }
+        None
+    }
+
+    /// Find the greatest enabled bit.
+    #[ensures(match result {
+        None => forall<i> 0 <= i && i < self@.len() ==> self@[i] == false,
+        Some(index) => index@ < self@.len()
+            && self@[index@] == true
+            && (forall<i> index@ < i && i < self@.len() ==> self@[i] == false),
+    })]
+    pub fn maximum(&self) -> Option<usize> {
+        let mut index = self.bits.len();
+        #[invariant(index@ <= self@.len())]
+        #[invariant(forall<i> index@ <= i && i < self@.len() ==> self@[i] == false)]
+        #[variant(index@)]
+        while index > 0 {
+            index -= 1;
+            if self.bits[index] {
+                return Some(index);
+            }
+        }
+        None
     }
 
     /// Return a bit, treating indices beyond the fixed length as disabled.
@@ -144,6 +430,197 @@ impl FixedBitSet {
         self.set(to, enabled);
     }
 
+    /// Count enabled bits in a valid half-open range.
+    #[requires(0 <= range.range_start())]
+    #[requires(range.range_start() <= range.range_end(self@.len()))]
+    #[requires(range.range_end(self@.len()) <= self@.len())]
+    #[ensures(result@ == range_count(
+        self@,
+        range.range_start(),
+        range.range_end(self@.len()),
+        true,
+    ))]
+    pub fn count_ones<T: IndexRange<usize>>(&self, range: T) -> usize {
+        let (start, end) = range.bounds(self.bits.len());
+        let mut index = start;
+        let mut count = 0usize;
+        #[invariant(start@ == range.range_start())]
+        #[invariant(end@ == range.range_end(self@.len()))]
+        #[invariant(start@ <= index@ && index@ <= end@)]
+        #[invariant(count@ == range_count(self@, start@, index@, true))]
+        #[invariant(count@ <= index@ - start@)]
+        #[variant(end@ - index@)]
+        while index < end {
+            proof_assert! {
+                range_count_succ(self@, start@, index@, end@, true);
+                range_count(self@, start@, index@ + 1, true)
+                    == range_count(self@, start@, index@, true)
+                        + if self@[index@] { 1 } else { 0 }
+            };
+            if self.bits[index] {
+                count += 1;
+            }
+            index += 1;
+        }
+        count
+    }
+
+    /// Count disabled bits in a valid half-open range.
+    #[requires(0 <= range.range_start())]
+    #[requires(range.range_start() <= range.range_end(self@.len()))]
+    #[requires(range.range_end(self@.len()) <= self@.len())]
+    #[ensures(result@ == range_count(
+        self@,
+        range.range_start(),
+        range.range_end(self@.len()),
+        false,
+    ))]
+    pub fn count_zeroes<T: IndexRange<usize>>(&self, range: T) -> usize {
+        let (start, end) = range.bounds(self.bits.len());
+        let mut index = start;
+        let mut count = 0usize;
+        #[invariant(start@ == range.range_start())]
+        #[invariant(end@ == range.range_end(self@.len()))]
+        #[invariant(start@ <= index@ && index@ <= end@)]
+        #[invariant(count@ == range_count(self@, start@, index@, false))]
+        #[invariant(count@ <= index@ - start@)]
+        #[variant(end@ - index@)]
+        while index < end {
+            proof_assert! {
+                range_count_succ(self@, start@, index@, end@, false);
+                range_count(self@, start@, index@ + 1, false)
+                    == range_count(self@, start@, index@, false)
+                        + if !self@[index@] { 1 } else { 0 }
+            };
+            if !self.bits[index] {
+                count += 1;
+            }
+            index += 1;
+        }
+        count
+    }
+
+    /// Set every bit in a valid half-open range to `enabled`.
+    #[requires(0 <= range.range_start())]
+    #[requires(range.range_start() <= range.range_end(self@.len()))]
+    #[requires(range.range_end(self@.len()) <= self@.len())]
+    #[ensures((^self)@.len() == self@.len())]
+    #[ensures(forall<i> 0 <= i && i < self@.len() ==>
+        (^self)@[i] == if range.range_start() <= i
+            && i < range.range_end(self@.len()) { enabled } else { self@[i] })]
+    pub fn set_range<T: IndexRange<usize>>(&mut self, range: T, enabled: bool) {
+        let old = snapshot!(self@);
+        let (start, end) = range.bounds(self.bits.len());
+        let mut index = start;
+        #[invariant(self@.len() == old.len())]
+        #[invariant(start@ == range.range_start())]
+        #[invariant(end@ == range.range_end(old.len()))]
+        #[invariant(start@ <= index@ && index@ <= end@)]
+        #[invariant(forall<i> 0 <= i && i < old.len() ==>
+            self@[i] == if start@ <= i && i < index@ { enabled } else { old[i] })]
+        #[variant(end@ - index@)]
+        while index < end {
+            self.bits[index] = enabled;
+            index += 1;
+        }
+    }
+
+    /// Enable every bit in a valid half-open range.
+    #[requires(0 <= range.range_start())]
+    #[requires(range.range_start() <= range.range_end(self@.len()))]
+    #[requires(range.range_end(self@.len()) <= self@.len())]
+    #[ensures((^self)@.len() == self@.len())]
+    #[ensures(forall<i> 0 <= i && i < self@.len() ==>
+        (^self)@[i] == if range.range_start() <= i
+            && i < range.range_end(self@.len()) { true } else { self@[i] })]
+    pub fn insert_range<T: IndexRange<usize>>(&mut self, range: T) {
+        self.set_range(range, true);
+    }
+
+    /// Disable every bit in a valid half-open range.
+    #[requires(0 <= range.range_start())]
+    #[requires(range.range_start() <= range.range_end(self@.len()))]
+    #[requires(range.range_end(self@.len()) <= self@.len())]
+    #[ensures((^self)@.len() == self@.len())]
+    #[ensures(forall<i> 0 <= i && i < self@.len() ==>
+        (^self)@[i] == if range.range_start() <= i
+            && i < range.range_end(self@.len()) { false } else { self@[i] })]
+    pub fn remove_range<T: IndexRange<usize>>(&mut self, range: T) {
+        self.set_range(range, false);
+    }
+
+    /// Invert every bit in a valid half-open range.
+    #[requires(0 <= range.range_start())]
+    #[requires(range.range_start() <= range.range_end(self@.len()))]
+    #[requires(range.range_end(self@.len()) <= self@.len())]
+    #[ensures((^self)@.len() == self@.len())]
+    #[ensures(forall<i> 0 <= i && i < self@.len() ==>
+        (^self)@[i] == if range.range_start() <= i
+            && i < range.range_end(self@.len()) { !self@[i] } else { self@[i] })]
+    pub fn toggle_range<T: IndexRange<usize>>(&mut self, range: T) {
+        let old = snapshot!(self@);
+        let (start, end) = range.bounds(self.bits.len());
+        let mut index = start;
+        #[invariant(self@.len() == old.len())]
+        #[invariant(start@ == range.range_start())]
+        #[invariant(end@ == range.range_end(old.len()))]
+        #[invariant(start@ <= index@ && index@ <= end@)]
+        #[invariant(forall<i> 0 <= i && i < old.len() ==>
+            self@[i] == if start@ <= i && i < index@ { !old[i] } else { old[i] })]
+        #[variant(end@ - index@)]
+        while index < end {
+            let enabled = self.bits[index];
+            self.bits[index] = !enabled;
+            index += 1;
+        }
+    }
+
+    /// Return whether every bit in a valid half-open range is enabled.
+    #[requires(0 <= range.range_start())]
+    #[requires(range.range_start() <= range.range_end(self@.len()))]
+    #[requires(range.range_end(self@.len()) <= self@.len())]
+    #[ensures(result == (forall<i> range.range_start() <= i
+        && i < range.range_end(self@.len()) ==> self@[i]))]
+    pub fn contains_all_in_range<T: IndexRange<usize>>(&self, range: T) -> bool {
+        let (start, end) = range.bounds(self.bits.len());
+        let mut index = start;
+        #[invariant(start@ == range.range_start())]
+        #[invariant(end@ == range.range_end(self@.len()))]
+        #[invariant(start@ <= index@ && index@ <= end@)]
+        #[invariant(forall<i> start@ <= i && i < index@ ==> self@[i])]
+        #[variant(end@ - index@)]
+        while index < end {
+            if !self.bits[index] {
+                return false;
+            }
+            index += 1;
+        }
+        true
+    }
+
+    /// Return whether any bit in a valid half-open range is enabled.
+    #[requires(0 <= range.range_start())]
+    #[requires(range.range_start() <= range.range_end(self@.len()))]
+    #[requires(range.range_end(self@.len()) <= self@.len())]
+    #[ensures(result == (exists<i> range.range_start() <= i
+        && i < range.range_end(self@.len()) && self@[i]))]
+    pub fn contains_any_in_range<T: IndexRange<usize>>(&self, range: T) -> bool {
+        let (start, end) = range.bounds(self.bits.len());
+        let mut index = start;
+        #[invariant(start@ == range.range_start())]
+        #[invariant(end@ == range.range_end(self@.len()))]
+        #[invariant(start@ <= index@ && index@ <= end@)]
+        #[invariant(forall<i> start@ <= i && i < index@ ==> !self@[i])]
+        #[variant(end@ - index@)]
+        while index < end {
+            if self.bits[index] {
+                return true;
+            }
+            index += 1;
+        }
+        false
+    }
+
     /// Grow as needed and enable `bit`.
     #[requires(bit@ < usize::MAX@)]
     #[ensures((^self)@.len() == if bit@ + 1 > self@.len() { bit@ + 1 } else { self@.len() })]
@@ -153,6 +630,246 @@ impl FixedBitSet {
     pub fn grow_and_insert(&mut self, bit: usize) {
         self.grow(bit + 1);
         self.insert(bit);
+    }
+
+    /// Return whether the two finite sets have no enabled index in common.
+    #[ensures(result == (forall<i> 0 <= i && i < self@.len() ==>
+        !(self@[i] && (if i < other@.len() { other@[i] } else { false }))))]
+    pub fn is_disjoint(&self, other: &FixedBitSet) -> bool {
+        let mut index = 0usize;
+        #[invariant(index@ <= self@.len())]
+        #[invariant(forall<i> 0 <= i && i < index@ ==>
+            !(self@[i] && (if i < other@.len() { other@[i] } else { false })))]
+        #[variant(self@.len() - index@)]
+        while index < self.bits.len() {
+            if self.bits[index] && other.contains(index) {
+                return false;
+            }
+            index += 1;
+        }
+        true
+    }
+
+    /// Return whether every enabled bit in `self` is enabled in `other`.
+    #[ensures(result == (forall<i> 0 <= i && i < self@.len() ==>
+        self@[i] ==> if i < other@.len() { other@[i] } else { false }))]
+    pub fn is_subset(&self, other: &FixedBitSet) -> bool {
+        let mut index = 0usize;
+        #[invariant(index@ <= self@.len())]
+        #[invariant(forall<i> 0 <= i && i < index@ ==>
+            self@[i] ==> if i < other@.len() { other@[i] } else { false })]
+        #[variant(self@.len() - index@)]
+        while index < self.bits.len() {
+            if self.bits[index] && !other.contains(index) {
+                return false;
+            }
+            index += 1;
+        }
+        true
+    }
+
+    /// Return whether every enabled bit in `other` is enabled in `self`.
+    #[ensures(result == (forall<i> 0 <= i && i < other@.len() ==>
+        other@[i] ==> if i < self@.len() { self@[i] } else { false }))]
+    pub fn is_superset(&self, other: &FixedBitSet) -> bool {
+        other.is_subset(self)
+    }
+
+    /// Replace `self` by the union, growing it to the longer finite length.
+    #[ensures((^self)@.len() == max_len(self@.len(), other@.len()))]
+    #[ensures(forall<i> 0 <= i && i < (^self)@.len() ==>
+        (^self)@[i] == (bit_or_false(self@, i) || bit_or_false(other@, i)))]
+    pub fn union_with(&mut self, other: &FixedBitSet) {
+        let old = snapshot!(self@);
+        let rhs = snapshot!(other@);
+        self.grow(other.bits.len());
+        let mut index = 0usize;
+        #[invariant(self@.len() == max_len(old.len(), rhs.len()))]
+        #[invariant(index@ <= rhs.len())]
+        #[invariant(forall<i> 0 <= i && i < self@.len() ==>
+            self@[i] == if i < index@ {
+                bit_or_false(*old, i) || bit_or_false(*rhs, i)
+            } else {
+                bit_or_false(*old, i)
+            })]
+        #[variant(rhs.len() - index@)]
+        while index < other.bits.len() {
+            let enabled = self.bits[index] || other.bits[index];
+            self.bits[index] = enabled;
+            index += 1;
+        }
+    }
+
+    /// Replace `self` by the intersection without changing its finite length.
+    #[ensures((^self)@.len() == self@.len())]
+    #[ensures(forall<i> 0 <= i && i < self@.len() ==>
+        (^self)@[i] == (self@[i] && bit_or_false(other@, i)))]
+    pub fn intersect_with(&mut self, other: &FixedBitSet) {
+        let old = snapshot!(self@);
+        let rhs = snapshot!(other@);
+        let mut index = 0usize;
+        #[invariant(self@.len() == old.len())]
+        #[invariant(index@ <= old.len())]
+        #[invariant(forall<i> 0 <= i && i < self@.len() ==>
+            self@[i] == if i < index@ {
+                old[i] && bit_or_false(*rhs, i)
+            } else {
+                old[i]
+            })]
+        #[variant(old.len() - index@)]
+        while index < self.bits.len() {
+            let enabled = self.bits[index] && other.contains(index);
+            self.bits[index] = enabled;
+            index += 1;
+        }
+    }
+
+    /// Remove every bit present in `other` without changing the finite length.
+    #[ensures((^self)@.len() == self@.len())]
+    #[ensures(forall<i> 0 <= i && i < self@.len() ==>
+        (^self)@[i] == (self@[i] && !bit_or_false(other@, i)))]
+    pub fn difference_with(&mut self, other: &FixedBitSet) {
+        let old = snapshot!(self@);
+        let rhs = snapshot!(other@);
+        let mut index = 0usize;
+        #[invariant(self@.len() == old.len())]
+        #[invariant(index@ <= old.len())]
+        #[invariant(forall<i> 0 <= i && i < self@.len() ==>
+            self@[i] == if i < index@ {
+                old[i] && !bit_or_false(*rhs, i)
+            } else {
+                old[i]
+            })]
+        #[variant(old.len() - index@)]
+        while index < self.bits.len() {
+            let enabled = self.bits[index] && !other.contains(index);
+            self.bits[index] = enabled;
+            index += 1;
+        }
+    }
+
+    /// Replace `self` by the symmetric difference, growing to the longer
+    /// finite length.
+    #[ensures((^self)@.len() == max_len(self@.len(), other@.len()))]
+    #[ensures(forall<i> 0 <= i && i < (^self)@.len() ==>
+        (^self)@[i] == (bit_or_false(self@, i) != bit_or_false(other@, i)))]
+    pub fn symmetric_difference_with(&mut self, other: &FixedBitSet) {
+        let old = snapshot!(self@);
+        let rhs = snapshot!(other@);
+        self.grow(other.bits.len());
+        let mut index = 0usize;
+        #[invariant(self@.len() == max_len(old.len(), rhs.len()))]
+        #[invariant(index@ <= rhs.len())]
+        #[invariant(forall<i> 0 <= i && i < self@.len() ==>
+            self@[i] == if i < index@ {
+                bit_or_false(*old, i) != bit_or_false(*rhs, i)
+            } else {
+                bit_or_false(*old, i)
+            })]
+        #[variant(rhs.len() - index@)]
+        while index < other.bits.len() {
+            let enabled = self.bits[index] != other.bits[index];
+            self.bits[index] = enabled;
+            index += 1;
+        }
+    }
+
+    #[requires(mode@ <= 3)]
+    #[ensures(result@ == binary_count(
+        self@,
+        other@,
+        max_len(self@.len(), other@.len()),
+        mode,
+    ))]
+    fn count_binary(&self, other: &FixedBitSet, mode: u8) -> usize {
+        let length = if self.bits.len() >= other.bits.len() {
+            self.bits.len()
+        } else {
+            other.bits.len()
+        };
+        let mut index = 0usize;
+        let mut count = 0usize;
+        proof_assert! {
+            binary_count_zero(self@, other@, mode);
+            binary_count(self@, other@, 0, mode) == 0
+        };
+        #[invariant(index@ <= length@)]
+        #[invariant(length@ == max_len(self@.len(), other@.len()))]
+        #[invariant(count@ == binary_count(self@, other@, index@, mode))]
+        #[invariant(count@ <= index@)]
+        #[variant(length@ - index@)]
+        while index < length {
+            let left = self.contains(index);
+            let right = other.contains(index);
+            let selected = if mode == 0 {
+                left || right
+            } else if mode == 1 {
+                left && right
+            } else if mode == 2 {
+                left && !right
+            } else {
+                left != right
+            };
+            proof_assert! {
+                binary_count_succ(self@, other@, index@, mode);
+                binary_count(self@, other@, index@ + 1, mode)
+                    == binary_count(self@, other@, index@, mode)
+                        + if combine_bits(
+                            bit_or_false(self@, index@),
+                            bit_or_false(other@, index@),
+                            mode,
+                        ) { 1 } else { 0 }
+            };
+            if selected {
+                count += 1;
+            }
+            index += 1;
+        }
+        count
+    }
+
+    /// Count enabled bits in the union without mutating either operand.
+    #[ensures(result@ == binary_count(
+        self@,
+        other@,
+        max_len(self@.len(), other@.len()),
+        0u8,
+    ))]
+    pub fn union_count(&self, other: &FixedBitSet) -> usize {
+        self.count_binary(other, 0)
+    }
+
+    /// Count enabled bits in the intersection without mutation.
+    #[ensures(result@ == binary_count(
+        self@,
+        other@,
+        max_len(self@.len(), other@.len()),
+        1u8,
+    ))]
+    pub fn intersection_count(&self, other: &FixedBitSet) -> usize {
+        self.count_binary(other, 1)
+    }
+
+    /// Count bits enabled in `self` but not `other` without mutation.
+    #[ensures(result@ == binary_count(
+        self@,
+        other@,
+        max_len(self@.len(), other@.len()),
+        2u8,
+    ))]
+    pub fn difference_count(&self, other: &FixedBitSet) -> usize {
+        self.count_binary(other, 2)
+    }
+
+    /// Count enabled bits in the symmetric difference without mutation.
+    #[ensures(result@ == binary_count(
+        self@,
+        other@,
+        max_len(self@.len(), other@.len()),
+        3u8,
+    ))]
+    pub fn symmetric_difference_count(&self, other: &FixedBitSet) -> usize {
+        self.count_binary(other, 3)
     }
 }
 

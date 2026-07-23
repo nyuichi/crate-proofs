@@ -1,5 +1,7 @@
 # heapless 0.9.2 provenance and Deque verification scope
 
+**Verification status: substantial public subset (partial).**
+
 This source tree is copied from the `heapless` 0.9.2 package published on
 crates.io. The published archive has SHA-256 checksum
 `2af2455f757db2b292a9b1768c4b70186d443bcb3b316252d6b540aec1cd89ed`.

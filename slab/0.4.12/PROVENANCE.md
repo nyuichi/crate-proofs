@@ -1,5 +1,7 @@
 # slab 0.4.12 provenance and verification scope
 
+**Verification status: structural or narrow proof (partial).**
+
 This source tree was copied from the `slab` 0.4.12 package in the local Cargo
 registry. Its `.cargo_vcs_info.json` records upstream revision
 `a1e4346070a48c936d808de75191dee5d01e433c`. Proof annotations, the

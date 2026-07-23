@@ -1,5 +1,7 @@
 # base64 0.22.1 provenance and verification scope
 
+**Verification status: structural or narrow proof (partial).**
+
 This source tree is copied from the crate published on crates.io as `base64`
 version `0.22.1`. The published archive has SHA-256 checksum
 `72b3254f16251a8381aa12e40e3c4d2f0199f8c6508fbecb9d91f575e0fbb8c6`.

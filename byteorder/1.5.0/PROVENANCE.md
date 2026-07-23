@@ -1,5 +1,7 @@
 # byteorder 1.5.0 provenance and verification scope
 
+**Verification status: strong functional core (partial).**
+
 This source tree is copied from the crate published on crates.io as
 `byteorder` version `1.5.0`. The published archive has SHA-256 checksum
 `1fd0f2584146f6f2ef48085050886acf353beff7305ebd1ae69500e27c67f64b`.

@@ -1,5 +1,7 @@
 # uuid 1.24.0 provenance and verification scope
 
+**Verification status: substantial public subset (partial).**
+
 This source tree is copied from the crate published on crates.io as `uuid`
 version `1.24.0`. The published archive has SHA-256 checksum
 `bf3923a6f5c4c6382e0b653c4117f48d631ea17f38ed86e2a828e6f7412f5239`.

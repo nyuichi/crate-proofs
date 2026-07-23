@@ -1,5 +1,7 @@
 # ipnet 2.12.0 provenance and verification scope
 
+**Verification status: structural or narrow proof (partial).**
+
 This directory is a copy of the published `ipnet` 2.12.0 crate. Its
 `.cargo_vcs_info.json` identifies upstream revision
 `65c04c35566890a1c8381fa524d0ab42e7d32364`. The `creusot-std` dependency,

@@ -1,5 +1,7 @@
 # fixedbitset 0.5.7 provenance and verification scope
 
+**Verification status: substantial public subset (partial).**
+
 This source tree is the published `fixedbitset` 0.5.7 crate. Its
 `.cargo_vcs_info.json` records upstream revision
 `f1db5d17dabc4b8f3ba68c1228a3ee7601c7f33c`. The `creusot-std` dependency,
@@ -18,12 +20,28 @@ fixed length, and element `i` is the enabled state of bit `i`. The public
 The verified core contracts are:
 
 - `new`, `default`, and `with_capacity`: exact length and initially-clear bits;
-- `len`, `is_empty`, and `contains`: exact observations, including the upstream
-  rule that out-of-range membership is false;
+- `len`, `is_empty`, `is_clear`, `is_full`, `contains`, `minimum`, and
+  `maximum`: exact observations, including the upstream rule that out-of-range
+  membership is false and exact least/greatest enabled-bit witnesses;
 - `clear`, `insert`, `remove`, `put`, `toggle`, `set`, and `copy_bit`: exact
   element-wise sequence transitions;
 - `grow`: preserved old prefix, exact non-shrinking length, and clear new suffix;
-- `grow_and_insert`: composition of growth with a single enabled bit.
+- `grow_and_insert`: composition of growth with a single enabled bit;
+- `count_ones` and `count_zeroes`: exact cardinalities for all four built-in
+  half-open range forms (`..`, `a..`, `..b`, and `a..b`);
+- `set_range`, `insert_range`, `remove_range`, and `toggle_range`: exact
+  element-wise transitions inside the normalized range with every outside bit
+  preserved;
+- `contains_all_in_range` and `contains_any_in_range`: exact universal and
+  existential range predicates, including empty ranges;
+- `is_disjoint`, `is_subset`, and `is_superset`: exact finite-set relations,
+  treating out-of-range positions as disabled;
+- `union_with`, `intersect_with`, `difference_with`, and
+  `symmetric_difference_with`: exact element-wise finite-set transitions and
+  their capacity effects;
+- `union_count`, `intersection_count`, `difference_count`, and
+  `symmetric_difference_count`: exact cardinalities of the corresponding
+  zero-extended finite-set combinations.
 
 The proof architecture is:
 
@@ -38,14 +56,18 @@ grow_and_insert / copy_bit
 
 | Component | Contract reviewed | Body proved | Trusted | Integrated run |
 |---|---:|---:|---:|---:|
-| construction and observers | yes | yes | no | yes |
+| construction and scalar observers | yes | yes | no | yes |
+| minimum/maximum and all/none observations | yes | yes | no | yes |
 | clear and single-bit transitions | yes | yes | no | yes |
 | `copy_bit` orchestration | yes | yes | no | yes |
 | `grow_and_insert` orchestration | yes | yes | no | yes |
 | `grow` state-machine allocation transition | yes | yes | no | yes |
+| range normalization, counting, mutation, and predicates | yes | yes | no | yes |
+| set relations and in-place set algebra | yes | yes | no | yes |
+| set-algebra cardinalities | yes | yes | no | yes |
 | upstream raw-pointer/SIMD representation | no | no | yes | no |
 
-`./verify-all.bash` succeeds as `Proved (16 files)` for
+`./verify-all.bash` succeeds as `Proved (59 files)` for
 `--no-default-features`, default features, and `--all-features`.
 
 ## Explicit boundary and removal condition
@@ -63,7 +85,9 @@ Remove the representation boundary after the raw allocation has a proved
 initialized-length invariant and each SIMD block operation has a bit-for-bit
 refinement lemma.
 
-Range operations, counting, min/max, slices, set algebra, iterators, formatting,
-hashing, ordering, serde, unsafe unchecked APIs, drops, and operator adapters
-remain outside the current verification interface. They are retained unchanged
-in ordinary builds and exercised by the upstream tests where applicable.
+Raw block slices and block-level counting, lazy set-algebra iterators,
+formatting, hashing, ordering, serde, unsafe unchecked APIs, drops, and operator
+adapters remain outside the current verification interface. They are retained
+unchanged in ordinary builds and exercised by the upstream tests where
+applicable. The ordinary all-feature suite passes 63 integration tests and 7
+documentation tests.
