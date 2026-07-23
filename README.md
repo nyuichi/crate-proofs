@@ -23,6 +23,7 @@ Run proofs with:
 ./slab/0.4.12/verify-all.bash
 ./smallvec/1.15.2/verify-all.bash
 ./bytes/1.11.1/verify-all.bash
+./base64/0.22.1/verify-all.bash
 ```
 
 `creusot-libs` contains the Creusot libraries pinned at commit
@@ -30,6 +31,20 @@ Run proofs with:
 standard-library specifications used by the proofs.
 
 ## Current proofs
+
+### base64 0.22.1
+
+`base64` 0.22.1 has exact arithmetic models for padded and unpadded encoded
+lengths and conservative decoded buffer lengths. The length bodies, including
+`usize` overflow behavior, and the `GeneralPurposeConfig` builders are proved.
+The matrix covers `no_std`, `alloc`, and all features.
+
+This is not an RFC 4648 codec proof. Alphabet validation and table generation,
+the optimized encode/decode bodies, suffix handling, padding writes, generic
+and allocation adapters, formatting, and streaming I/O remain explicit trusted
+boundaries or Creusot exclusions. The upstream all-feature suite passes 179
+unit tests, 13 integration tests, and 25 documentation tests. Full boundary and
+removal-condition details are in `PROVENANCE.md`.
 
 ### bytes 1.11.1
 
