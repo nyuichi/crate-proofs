@@ -7,24 +7,10 @@ Each `<name>/<version>` directory is a complete copy of the
 published crate with specifications and proof annotations added in place.
 Public APIs and runtime behavior are preserved.
 
-## Verification status
-
-"Complete-equivalent" means that all crate-owned core algorithm semantics are
-modeled and proved; any remaining trusted body is a documented narrow standard
-library, formatting, allocation, randomness, or other external protocol
-boundary with an exact contract.
-
-| Status | Crates |
-|---|---|
-| Complete / complete-equivalent | `fnv`, `hex`, `percent-encoding`, `rustc-hash` |
-| Strong functional core (partial) | `byteorder`, `cobs`, `crc`, `fugit` |
-| Substantial public subset (partial) | `fixedbitset`, `heapless`, `semver`, `uuid` |
-| Structural or narrow proof (partial) | `adler2`, `arrayvec`, `base64`, `bstr`, `bytes`, `ipnet`, `slab`, `smallvec` |
+## Running proofs
 
 Each crate's exact proved surface, remaining boundaries, feature matrix, and
-reproduction command are recorded in its `PROVENANCE.md`.
-
-Run proofs with:
+reproduction command are recorded in its `PROVENANCE.md`. Run the proofs with:
 
 ```sh
 ./verify.bash adler2/2.0.0
