@@ -23,6 +23,7 @@ Run proofs with:
 ./slab/0.4.12/verify-all.bash
 ./smallvec/1.15.2/verify-all.bash
 ./bytes/1.11.1/verify-all.bash
+./semver/1.0.28/verify-all.bash
 ```
 
 `creusot-libs` contains the Creusot libraries pinned at commit
@@ -30,6 +31,23 @@ Run proofs with:
 standard-library specifications used by the proofs.
 
 ## Current proofs
+
+### semver 1.0.28
+
+`semver` 1.0.28 has an exact model of Cargo's version-requirement evaluation.
+Contracts and proved bodies cover all eight comparator operators, partial
+major/minor/patch versions, requirement conjunction, and the special rule that
+admits prerelease versions only when a comparator names the same numeric
+version with a nonempty prerelease. Both public `matches` methods are proved
+against these models.
+
+The proof matrix covers `no_std` and all features. There are two trusted
+identifier observations: prerelease emptiness and prerelease precedence. They
+isolate the upstream pointer-tagged short-string representation; parsing,
+formatting, serde, and identifier storage/ordering bodies remain outside proof
+translation. The ordinary all-feature upstream suite passes 34 tests. Full
+boundary and removal-condition details are recorded in the crate's
+`PROVENANCE.md`.
 
 ### bytes 1.11.1
 
