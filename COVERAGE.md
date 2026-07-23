@@ -36,8 +36,9 @@ random seed creation outside its fully proved deterministic hashing algorithm.
 - `rustc-hash`: removed trust from complete byte compression and final rotation;
   all deterministic hashing bodies now prove in four feature configurations.
 - `fixedbitset`: added exact proofs for full/clear/min/max observers, set
-  relations, four in-place set operations, and four exact set cardinalities;
-  the integrated proof increased from 16 to 35 files.
+  relations, four in-place set operations, four exact set cardinalities, and
+  all eight range counting/mutation/predicate APIs over four built-in range
+  forms; the integrated proof increased from 16 to 59 files.
 - `fnv`: added a reproducible no_std/std feature-matrix script and recorded its
   trust-free complete status.
 - `hex`: made the unmodeled derived `Debug` formatter boundary explicit in the

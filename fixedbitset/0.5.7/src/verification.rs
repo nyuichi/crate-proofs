@@ -3,6 +3,7 @@
 extern crate alloc;
 
 use alloc::{vec, vec::Vec};
+use core::ops::{Range, RangeFrom, RangeFull, RangeTo};
 #[allow(unused_imports)]
 use creusot_std::prelude::{
     ensures, invariant, logic, pearlite, proof_assert, requires, snapshot, variant, DeepModel, Int,
@@ -11,6 +12,127 @@ use creusot_std::prelude::{
 
 /// Storage block exposed by the upstream API.
 pub type Block = usize;
+
+/// Built-in range syntax accepted by the upstream API.
+pub trait IndexRange<T = usize> {
+    #[logic]
+    fn range_start(&self) -> Int;
+
+    #[logic]
+    fn range_end(&self, length: Int) -> Int;
+
+    fn start(&self) -> Option<T> {
+        None
+    }
+
+    fn end(&self) -> Option<T> {
+        None
+    }
+
+    #[requires(self.range_start() <= self.range_end(length@))]
+    #[requires(self.range_end(length@) <= length@)]
+    #[ensures(result.0@ == self.range_start())]
+    #[ensures(result.1@ == self.range_end(length@))]
+    fn bounds(&self, length: usize) -> (usize, usize);
+}
+
+impl IndexRange<usize> for RangeFull {
+    #[logic(open)]
+    fn range_start(&self) -> Int {
+        0
+    }
+
+    #[logic(open)]
+    fn range_end(&self, length: Int) -> Int {
+        length
+    }
+
+    #[requires(self.range_start() <= self.range_end(length@))]
+    #[requires(self.range_end(length@) <= length@)]
+    #[ensures(result.0@ == self.range_start())]
+    #[ensures(result.1@ == self.range_end(length@))]
+    fn bounds(&self, length: usize) -> (usize, usize) {
+        (0, length)
+    }
+}
+
+impl IndexRange<usize> for RangeFrom<usize> {
+    #[logic(open)]
+    fn range_start(&self) -> Int {
+        pearlite! { self.start@ }
+    }
+
+    #[logic(open)]
+    fn range_end(&self, length: Int) -> Int {
+        length
+    }
+
+    fn start(&self) -> Option<usize> {
+        Some(self.start)
+    }
+
+    #[requires(self.range_start() <= self.range_end(length@))]
+    #[requires(self.range_end(length@) <= length@)]
+    #[ensures(result.0@ == self.range_start())]
+    #[ensures(result.1@ == self.range_end(length@))]
+    fn bounds(&self, length: usize) -> (usize, usize) {
+        (self.start, length)
+    }
+}
+
+impl IndexRange<usize> for RangeTo<usize> {
+    #[logic(open)]
+    fn range_start(&self) -> Int {
+        0
+    }
+
+    #[logic(open)]
+    fn range_end(&self, _length: Int) -> Int {
+        pearlite! { self.end@ }
+    }
+
+    fn end(&self) -> Option<usize> {
+        Some(self.end)
+    }
+
+    #[requires(self.range_start() <= self.range_end(length@))]
+    #[requires(self.range_end(length@) <= length@)]
+    #[ensures(result.0@ == self.range_start())]
+    #[ensures(result.1@ == self.range_end(length@))]
+    fn bounds(&self, length: usize) -> (usize, usize) {
+        let _ = length;
+        (0, self.end)
+    }
+}
+
+impl IndexRange<usize> for Range<usize> {
+    #[logic(open)]
+    fn range_start(&self) -> Int {
+        pearlite! { self.start@ }
+    }
+
+    #[logic(open)]
+    fn range_end(&self, _length: Int) -> Int {
+        pearlite! { self.end@ }
+    }
+
+    fn start(&self) -> Option<usize> {
+        Some(self.start)
+    }
+
+    fn end(&self) -> Option<usize> {
+        Some(self.end)
+    }
+
+    #[requires(self.range_start() <= self.range_end(length@))]
+    #[requires(self.range_end(length@) <= length@)]
+    #[ensures(result.0@ == self.range_start())]
+    #[ensures(result.1@ == self.range_end(length@))]
+    fn bounds(&self, length: usize) -> (usize, usize) {
+        let _ = length;
+        (self.start, self.end)
+    }
+}
 
 /// A fixed-length sequence of Boolean bits.
 pub struct FixedBitSet {
@@ -62,6 +184,33 @@ pub fn binary_count(left: Seq<bool>, right: Seq<bool>, count: Int, mode: u8) -> 
                     mode,
                 ) { 1 } else { 0 }
         }
+    }
+}
+
+/// Count bits equal to `enabled` in `[start, end)`.
+#[logic]
+#[requires(0 <= start && start <= end && end <= bits.len())]
+#[variant(end - start)]
+pub fn range_count(bits: Seq<bool>, start: Int, end: Int, enabled: bool) -> Int {
+    if start == end {
+        0
+    } else {
+        pearlite! {
+            (if bits[start] == enabled { 1 } else { 0 })
+                + range_count(bits, start + 1, end, enabled)
+        }
+    }
+}
+
+#[logic]
+#[requires(0 <= start && start <= index && index < end && end <= bits.len())]
+#[variant(index - start)]
+#[ensures(range_count(bits, start, index + 1, enabled)
+    == range_count(bits, start, index, enabled)
+        + if bits[index] == enabled { 1 } else { 0 })]
+fn range_count_succ(bits: Seq<bool>, start: Int, index: Int, end: Int, enabled: bool) {
+    if start < index {
+        range_count_succ(bits, start + 1, index, end, enabled);
     }
 }
 
@@ -279,6 +428,197 @@ impl FixedBitSet {
     pub fn copy_bit(&mut self, from: usize, to: usize) {
         let enabled = self.contains(from);
         self.set(to, enabled);
+    }
+
+    /// Count enabled bits in a valid half-open range.
+    #[requires(0 <= range.range_start())]
+    #[requires(range.range_start() <= range.range_end(self@.len()))]
+    #[requires(range.range_end(self@.len()) <= self@.len())]
+    #[ensures(result@ == range_count(
+        self@,
+        range.range_start(),
+        range.range_end(self@.len()),
+        true,
+    ))]
+    pub fn count_ones<T: IndexRange<usize>>(&self, range: T) -> usize {
+        let (start, end) = range.bounds(self.bits.len());
+        let mut index = start;
+        let mut count = 0usize;
+        #[invariant(start@ == range.range_start())]
+        #[invariant(end@ == range.range_end(self@.len()))]
+        #[invariant(start@ <= index@ && index@ <= end@)]
+        #[invariant(count@ == range_count(self@, start@, index@, true))]
+        #[invariant(count@ <= index@ - start@)]
+        #[variant(end@ - index@)]
+        while index < end {
+            proof_assert! {
+                range_count_succ(self@, start@, index@, end@, true);
+                range_count(self@, start@, index@ + 1, true)
+                    == range_count(self@, start@, index@, true)
+                        + if self@[index@] { 1 } else { 0 }
+            };
+            if self.bits[index] {
+                count += 1;
+            }
+            index += 1;
+        }
+        count
+    }
+
+    /// Count disabled bits in a valid half-open range.
+    #[requires(0 <= range.range_start())]
+    #[requires(range.range_start() <= range.range_end(self@.len()))]
+    #[requires(range.range_end(self@.len()) <= self@.len())]
+    #[ensures(result@ == range_count(
+        self@,
+        range.range_start(),
+        range.range_end(self@.len()),
+        false,
+    ))]
+    pub fn count_zeroes<T: IndexRange<usize>>(&self, range: T) -> usize {
+        let (start, end) = range.bounds(self.bits.len());
+        let mut index = start;
+        let mut count = 0usize;
+        #[invariant(start@ == range.range_start())]
+        #[invariant(end@ == range.range_end(self@.len()))]
+        #[invariant(start@ <= index@ && index@ <= end@)]
+        #[invariant(count@ == range_count(self@, start@, index@, false))]
+        #[invariant(count@ <= index@ - start@)]
+        #[variant(end@ - index@)]
+        while index < end {
+            proof_assert! {
+                range_count_succ(self@, start@, index@, end@, false);
+                range_count(self@, start@, index@ + 1, false)
+                    == range_count(self@, start@, index@, false)
+                        + if !self@[index@] { 1 } else { 0 }
+            };
+            if !self.bits[index] {
+                count += 1;
+            }
+            index += 1;
+        }
+        count
+    }
+
+    /// Set every bit in a valid half-open range to `enabled`.
+    #[requires(0 <= range.range_start())]
+    #[requires(range.range_start() <= range.range_end(self@.len()))]
+    #[requires(range.range_end(self@.len()) <= self@.len())]
+    #[ensures((^self)@.len() == self@.len())]
+    #[ensures(forall<i> 0 <= i && i < self@.len() ==>
+        (^self)@[i] == if range.range_start() <= i
+            && i < range.range_end(self@.len()) { enabled } else { self@[i] })]
+    pub fn set_range<T: IndexRange<usize>>(&mut self, range: T, enabled: bool) {
+        let old = snapshot!(self@);
+        let (start, end) = range.bounds(self.bits.len());
+        let mut index = start;
+        #[invariant(self@.len() == old.len())]
+        #[invariant(start@ == range.range_start())]
+        #[invariant(end@ == range.range_end(old.len()))]
+        #[invariant(start@ <= index@ && index@ <= end@)]
+        #[invariant(forall<i> 0 <= i && i < old.len() ==>
+            self@[i] == if start@ <= i && i < index@ { enabled } else { old[i] })]
+        #[variant(end@ - index@)]
+        while index < end {
+            self.bits[index] = enabled;
+            index += 1;
+        }
+    }
+
+    /// Enable every bit in a valid half-open range.
+    #[requires(0 <= range.range_start())]
+    #[requires(range.range_start() <= range.range_end(self@.len()))]
+    #[requires(range.range_end(self@.len()) <= self@.len())]
+    #[ensures((^self)@.len() == self@.len())]
+    #[ensures(forall<i> 0 <= i && i < self@.len() ==>
+        (^self)@[i] == if range.range_start() <= i
+            && i < range.range_end(self@.len()) { true } else { self@[i] })]
+    pub fn insert_range<T: IndexRange<usize>>(&mut self, range: T) {
+        self.set_range(range, true);
+    }
+
+    /// Disable every bit in a valid half-open range.
+    #[requires(0 <= range.range_start())]
+    #[requires(range.range_start() <= range.range_end(self@.len()))]
+    #[requires(range.range_end(self@.len()) <= self@.len())]
+    #[ensures((^self)@.len() == self@.len())]
+    #[ensures(forall<i> 0 <= i && i < self@.len() ==>
+        (^self)@[i] == if range.range_start() <= i
+            && i < range.range_end(self@.len()) { false } else { self@[i] })]
+    pub fn remove_range<T: IndexRange<usize>>(&mut self, range: T) {
+        self.set_range(range, false);
+    }
+
+    /// Invert every bit in a valid half-open range.
+    #[requires(0 <= range.range_start())]
+    #[requires(range.range_start() <= range.range_end(self@.len()))]
+    #[requires(range.range_end(self@.len()) <= self@.len())]
+    #[ensures((^self)@.len() == self@.len())]
+    #[ensures(forall<i> 0 <= i && i < self@.len() ==>
+        (^self)@[i] == if range.range_start() <= i
+            && i < range.range_end(self@.len()) { !self@[i] } else { self@[i] })]
+    pub fn toggle_range<T: IndexRange<usize>>(&mut self, range: T) {
+        let old = snapshot!(self@);
+        let (start, end) = range.bounds(self.bits.len());
+        let mut index = start;
+        #[invariant(self@.len() == old.len())]
+        #[invariant(start@ == range.range_start())]
+        #[invariant(end@ == range.range_end(old.len()))]
+        #[invariant(start@ <= index@ && index@ <= end@)]
+        #[invariant(forall<i> 0 <= i && i < old.len() ==>
+            self@[i] == if start@ <= i && i < index@ { !old[i] } else { old[i] })]
+        #[variant(end@ - index@)]
+        while index < end {
+            let enabled = self.bits[index];
+            self.bits[index] = !enabled;
+            index += 1;
+        }
+    }
+
+    /// Return whether every bit in a valid half-open range is enabled.
+    #[requires(0 <= range.range_start())]
+    #[requires(range.range_start() <= range.range_end(self@.len()))]
+    #[requires(range.range_end(self@.len()) <= self@.len())]
+    #[ensures(result == (forall<i> range.range_start() <= i
+        && i < range.range_end(self@.len()) ==> self@[i]))]
+    pub fn contains_all_in_range<T: IndexRange<usize>>(&self, range: T) -> bool {
+        let (start, end) = range.bounds(self.bits.len());
+        let mut index = start;
+        #[invariant(start@ == range.range_start())]
+        #[invariant(end@ == range.range_end(self@.len()))]
+        #[invariant(start@ <= index@ && index@ <= end@)]
+        #[invariant(forall<i> start@ <= i && i < index@ ==> self@[i])]
+        #[variant(end@ - index@)]
+        while index < end {
+            if !self.bits[index] {
+                return false;
+            }
+            index += 1;
+        }
+        true
+    }
+
+    /// Return whether any bit in a valid half-open range is enabled.
+    #[requires(0 <= range.range_start())]
+    #[requires(range.range_start() <= range.range_end(self@.len()))]
+    #[requires(range.range_end(self@.len()) <= self@.len())]
+    #[ensures(result == (exists<i> range.range_start() <= i
+        && i < range.range_end(self@.len()) && self@[i]))]
+    pub fn contains_any_in_range<T: IndexRange<usize>>(&self, range: T) -> bool {
+        let (start, end) = range.bounds(self.bits.len());
+        let mut index = start;
+        #[invariant(start@ == range.range_start())]
+        #[invariant(end@ == range.range_end(self@.len()))]
+        #[invariant(start@ <= index@ && index@ <= end@)]
+        #[invariant(forall<i> start@ <= i && i < index@ ==> !self@[i])]
+        #[variant(end@ - index@)]
+        while index < end {
+            if self.bits[index] {
+                return true;
+            }
+            index += 1;
+        }
+        false
     }
 
     /// Grow as needed and enable `bit`.

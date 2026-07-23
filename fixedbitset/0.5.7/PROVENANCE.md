@@ -25,6 +25,13 @@ The verified core contracts are:
   element-wise sequence transitions;
 - `grow`: preserved old prefix, exact non-shrinking length, and clear new suffix;
 - `grow_and_insert`: composition of growth with a single enabled bit;
+- `count_ones` and `count_zeroes`: exact cardinalities for all four built-in
+  half-open range forms (`..`, `a..`, `..b`, and `a..b`);
+- `set_range`, `insert_range`, `remove_range`, and `toggle_range`: exact
+  element-wise transitions inside the normalized range with every outside bit
+  preserved;
+- `contains_all_in_range` and `contains_any_in_range`: exact universal and
+  existential range predicates, including empty ranges;
 - `is_disjoint`, `is_subset`, and `is_superset`: exact finite-set relations,
   treating out-of-range positions as disabled;
 - `union_with`, `intersect_with`, `difference_with`, and
@@ -53,11 +60,12 @@ grow_and_insert / copy_bit
 | `copy_bit` orchestration | yes | yes | no | yes |
 | `grow_and_insert` orchestration | yes | yes | no | yes |
 | `grow` state-machine allocation transition | yes | yes | no | yes |
+| range normalization, counting, mutation, and predicates | yes | yes | no | yes |
 | set relations and in-place set algebra | yes | yes | no | yes |
 | set-algebra cardinalities | yes | yes | no | yes |
 | upstream raw-pointer/SIMD representation | no | no | yes | no |
 
-`./verify-all.bash` succeeds as `Proved (35 files)` for
+`./verify-all.bash` succeeds as `Proved (59 files)` for
 `--no-default-features`, default features, and `--all-features`.
 
 ## Explicit boundary and removal condition
@@ -75,9 +83,9 @@ Remove the representation boundary after the raw allocation has a proved
 initialized-length invariant and each SIMD block operation has a bit-for-bit
 refinement lemma.
 
-Range operations and range counting, raw block slices and block-level counting,
-lazy set-algebra iterators, formatting, hashing, ordering, serde, unsafe
-unchecked APIs, drops, and operator adapters remain outside the current
-verification interface. They are retained unchanged in ordinary builds and
-exercised by the upstream tests where applicable. The ordinary all-feature
-suite passes 63 integration tests and 7 documentation tests.
+Raw block slices and block-level counting, lazy set-algebra iterators,
+formatting, hashing, ordering, serde, unsafe unchecked APIs, drops, and operator
+adapters remain outside the current verification interface. They are retained
+unchanged in ordinary builds and exercised by the upstream tests where
+applicable. The ordinary all-feature suite passes 63 integration tests and 7
+documentation tests.
