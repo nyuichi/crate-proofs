@@ -50,8 +50,10 @@ are narrow integration boundaries:
   Creusot model. Serialization still exposes the exact string passed across
   the boundary, and successful deserialization is tied to the selected
   `FromHex` implementation's postcondition;
-- `Display::fmt`, because Creusot does not model mutation through
-  `core::fmt::Formatter`. Upstream tests check every exact display string.
+- `Display::fmt` and the verification-only spelling of the derived `Debug`
+  implementation, because Creusot does not model mutation through
+  `core::fmt::Formatter`. Ordinary builds retain the upstream `Debug` derive,
+  and upstream tests check every exact display string.
 
 ## 0.4.2 to 0.4.3 compatibility audit
 
@@ -70,4 +72,7 @@ exposes deserialization but not serialization. Default-feature behavior is
 unchanged.
 
 Run `./verify-all.bash` in this directory to reproduce the feature-matrix
-proof. Generated Cargo and Why3 build artifacts are intentionally not tracked.
+proof. The latest integrated run passes all four no-feature, `alloc`, `serde`,
+and all-feature configurations. The ordinary all-feature suite passes 14 unit,
+4 serde integration, 2 version-audit, and 11 documentation tests. Generated
+Cargo and Why3 build artifacts are intentionally not tracked.

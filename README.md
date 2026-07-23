@@ -7,11 +7,14 @@ Each `<name>/<version>` directory is a complete copy of the
 published crate with specifications and proof annotations added in place.
 Public APIs and runtime behavior are preserved.
 
+See [`COVERAGE.md`](COVERAGE.md) for the 20-crate completion audit, the
+definition of "complete-equivalent", and the prioritized remaining work.
+
 Run proofs with:
 
 ```sh
 ./verify.bash adler2/2.0.0
-./verify.bash fnv/1.0.7
+./fnv/1.0.7/verify-all.bash
 ./crc/3.4.0/verify-all.bash
 ./arrayvec/0.7.8/verify-all.bash
 ./byteorder/1.5.0/verify-all.bash
@@ -29,6 +32,7 @@ Run proofs with:
 ./bstr/1.13.0/verify-all.bash
 ./base64/0.22.1/verify-all.bash
 ./ipnet/2.12.0/verify-all.bash
+./heapless/0.9.2/verify-all.bash
 ```
 
 `creusot-libs` contains the Creusot libraries pinned at commit
@@ -36,6 +40,19 @@ Run proofs with:
 standard-library specifications used by the proofs.
 
 ## Current proofs
+
+### heapless 0.9.2
+
+`heapless` 0.9.2 has a verified length/cursor state machine for `Deque`.
+Capacity and wraparound arithmetic, empty/full observations, and checked and
+unchecked front/back push and pop bodies are proved, including exact length
+effects. The integrated default-feature run proves 57 files, and the ordinary
+Deque suite passes 34 tests.
+
+This is a Deque structural proof, not a whole-heapless or element-sequence
+proof. Generic `MaybeUninit<T>` slot moves, construction, clearing, slice and
+reference exposure, element-aware iterators, and the crate's other collections
+remain trusted or excluded. Full boundaries are recorded in `PROVENANCE.md`.
 
 ### semver 1.0.28
 
@@ -57,18 +74,19 @@ boundary and removal-condition details are recorded in the crate's
 ### fixedbitset 0.5.7
 
 `fixedbitset` 0.5.7 has an exact finite Boolean-sequence model for its core
-fixed-length state machine. Construction, length and emptiness observation,
-out-of-range membership, clearing, insertion, removal, put, toggle, set, bit
-copying, and grow-and-insert orchestration are proved with element-wise
-contracts. The proof matrix covers no-default-features, default `std`, and all
-features.
+fixed-length state machine. Construction, length/full/clear observation, exact
+minimum and maximum, out-of-range membership, clearing, insertion, removal,
+put, toggle, set, bit copying, grow-and-insert orchestration, set relations,
+all four in-place set algebra operations, and their exact cardinalities are
+proved with element-wise contracts. The proof matrix covers
+no-default-features, default `std`, and all features.
 
-The upstream aligned SIMD allocation, raw-pointer ownership, range and set
-algebra, iterators, counting, formatting, adapters, and unsafe APIs remain
-outside proof translation. Ordinary builds retain the complete upstream
-implementation, whose all-feature suite
-passes 63 unit tests and 7 documentation tests. Full boundary and removal
-conditions are in `PROVENANCE.md`.
+The upstream aligned SIMD allocation, raw-pointer ownership, range operations
+and range counting, lazy set-algebra iterators, raw block counting, formatting,
+adapters, and unsafe APIs remain outside proof translation. Ordinary builds
+retain the complete upstream implementation, whose all-feature suite passes 63
+unit tests and 7 documentation tests. Full boundary and removal conditions are
+in `PROVENANCE.md`.
 
 ### uuid 1.24.0
 
@@ -187,12 +205,14 @@ the overlapping suffix, length mixing, and platform-selected multiplication.
 Contracts cover `FxHasher`, `FxBuildHasher`, `FxSeededState`, and the optional
 `FxRandomState`; all four public nominal types have explicit invariants.
 
-Integer updates, the multiply-mix primitive on the x86-64 proof target, seeded
-builders, and the public byte-write orchestration are proved. The optimized
-slice compression body, final rotate primitive, and thread-local random seed
-creation remain explicit trusted boundaries with reviewed contracts and
-removal conditions in `PROVENANCE.md`. The proof matrix covers `no_std`,
-default `std`, `rand`, and all features including `nightly`.
+Integer updates, the multiply-mix primitive on the x86-64 proof target, the
+complete byte-compression algorithm, final rotation, seeded builders, and the
+public byte-write orchestration are proved. Runtime builds retain the upstream
+optimized slice and rotate spellings; the verification build uses proved
+equivalent indexed little-endian reads and shifts. The only trusted body is the
+optional thread-local random seed constructor, whose RNG protocol is not
+modeled and which is outside the deterministic hash algorithm. The proof matrix
+covers `no_std`, default `std`, `rand`, and all features including `nightly`.
 
 ### crc 3.4.0
 
@@ -257,17 +277,18 @@ element-by-element correspondence with the source slice.
 
 ### fnv 1.0.7
 
-`fnv` 1.0.7 is checked for arithmetic and indexing safety. Its 64-bit FNV-1a
-step is modeled with bitvector XOR and wrapping multiplication. The public
-`FnvHasher` type has an opaque `u64` view and an explicit invariant stating that
-every 64-bit state is valid. Contracts specify `Default`, `with_key`, `finish`,
-and `write`; in particular, `write` is proved to update the old view to the
-recursive FNV-1a fold over the complete input slice.
+`fnv` 1.0.7 is a complete functional proof of the crate-owned FNV-1a
+implementation. Its 64-bit step is modeled with bitvector XOR and wrapping
+multiplication. The public `FnvHasher` type has an opaque `u64` view and an
+explicit invariant stating that every 64-bit state is valid. The proved bodies
+cover every crate-owned executable API: `Default`, `with_key`, `finish`, and
+`write`; in particular, `write` updates the old view to the recursive FNV-1a
+fold over the complete input slice.
 
-The proof keeps `FnvHasher`'s tuple field private, preserving the upstream API.
-Its logical view is opaque outside the crate, so clients can use the contracts
-without depending on that private representation. The upstream FNV test vectors
-also exercise the public `write` and `finish` behavior.
+The proof contains no `#[trusted]` declaration. The remaining public map/set and
+builder names are standard-library type aliases, not additional crate-owned
+algorithm bodies. The proof matrix covers `no_std` and default `std`; the
+upstream FNV test vectors exercise `write` and `finish` in both configurations.
 
 ### hex 0.4.3
 

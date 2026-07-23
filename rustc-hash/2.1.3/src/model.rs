@@ -6,7 +6,7 @@
 //! slice implementation.
 
 #[allow(unused_imports)]
-use creusot_std::prelude::{logic, pearlite, requires, variant, Int, Seq};
+use creusot_std::prelude::{ensures, logic, pearlite, requires, variant, Int, Seq};
 
 pub const MODEL_SEED1: u64 = 0x243f6a8885a308d3;
 pub const MODEL_SEED2: u64 = 0x13198a2e03707344;
@@ -177,8 +177,21 @@ pub fn bulk_fold(bytes: Seq<u8>, count: Int, state: (u64, u64)) -> (u64, u64) {
     }
 }
 
-/// Exact byte-compression model used by `Hasher::write`.
+/// The empty block prefix leaves the state unchanged.
 #[logic]
+#[ensures(bulk_fold(bytes, 0, state) == state)]
+pub fn bulk_fold_zero(bytes: Seq<u8>, state: (u64, u64)) {}
+
+/// Unfold one additional complete block in the forward direction used by the
+/// verified runtime loop.
+#[logic]
+#[requires(0 <= count && (count + 1) * 16 <= bytes.len())]
+#[ensures(bulk_fold(bytes, count + 1, state)
+    == bulk_step(bytes, count * 16, bulk_fold(bytes, count, state)))]
+pub fn bulk_fold_succ(bytes: Seq<u8>, count: Int, state: (u64, u64)) {}
+
+/// Exact byte-compression model used by `Hasher::write`.
+#[logic(open)]
 #[requires(len_word@ == bytes.len())]
 pub fn hash_bytes_model(bytes: Seq<u8>, len_word: u64) -> u64 {
     pearlite! {
