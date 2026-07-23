@@ -22,6 +22,7 @@ Run proofs with:
 ./crates/rustc-hash/2.1.3/verify-all.bash
 ./crates/slab/0.4.12/verify-all.bash
 ./crates/smallvec/1.15.2/verify-all.bash
+./crates/bytes/1.11.1/verify-all.bash
 ```
 
 `creusot-libs` contains the Creusot libraries pinned at commit
@@ -29,6 +30,23 @@ Run proofs with:
 standard-library specifications used by the proofs.
 
 ## Current proofs
+
+### bytes 1.11.1
+
+`bytes` 1.11.1 has a structural length/capacity model for `Bytes` and
+`BytesMut`. Empty construction, length/capacity observation, splitting,
+truncation, clearing, resizing, freezing, and the core cursor laws are proved
+in a Creusot-facing state machine. The matrix covers no-default-features,
+default `std`, and all features.
+
+This is not a byte-content or raw-memory proof. The published implementation's
+type-erased vtables, raw pointers, atomics, reference counting, uninitialized
+storage, complete `Buf`/`BufMut` API, and serde adapters remain outside proof
+translation because the pinned Creusot reaches an internal compiler error in a
+generic `Vec<T>` adapter. Runtime builds keep the upstream implementation and
+API. Two small `std` conversion helpers are additionally trusted because
+`usize::try_from(u64)` lacks a pinned-library contract. Full boundary and
+removal-condition details are in `PROVENANCE.md`.
 
 ### slab 0.4.12
 
