@@ -7,20 +7,6 @@ Each `<name>/<version>` directory is a complete copy of the
 published crate with specifications and proof annotations added in place.
 Public APIs and runtime behavior are preserved.
 
-## Verification status
-
-"Complete-equivalent" means that all crate-owned core algorithm semantics are
-modeled and proved; any remaining trusted body is a documented narrow standard
-library, formatting, allocation, randomness, or other external protocol
-boundary with an exact contract.
-
-| Status | Crates |
-|---|---|
-| Complete / complete-equivalent | `adler2`, `fnv`, `hex`, `itoa`, `percent-encoding`, `rustc-hash`, `unicode-ident` |
-| Strong functional core (partial) | `byteorder`, `cobs`, `crc`, `crossbeam-queue`, `fugit`, `indexmap`, `utf8parse` |
-| Substantial public subset (partial) | `fixedbitset`, `heapless`, `semver`, `uuid` |
-| Structural or narrow proof (partial) | `arrayvec`, `base64`, `bitflags`, `bstr`, `bytes`, `ipnet`, `lru`, `slab`, `smallvec` |
-
 ## Running proofs
 
 Each crate's exact proved surface, remaining boundaries, feature matrix, and
