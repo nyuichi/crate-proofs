@@ -33,6 +33,7 @@ reproduction command are recorded in its `PROVENANCE.md`. Run the proofs with:
 ./base64/0.22.1/verify-all.bash
 ./ipnet/2.12.0/verify-all.bash
 ./heapless/0.9.2/verify-all.bash
+./indexmap/2.14.0/verify-all.bash
 ```
 
 `creusot-libs` contains the Creusot libraries pinned at commit
@@ -40,6 +41,21 @@ reproduction command are recorded in its `PROVENANCE.md`. Run the proofs with:
 standard-library specifications used by the proofs.
 
 ## Current proofs
+
+### indexmap 2.14.0
+
+`indexmap` 2.14.0 has exact ordered-sequence models for `IndexMap` and
+`IndexSet`. Caller-hasher construction, length and emptiness observation,
+clearing, exact prefix truncation, ordered popping, shift removal by index,
+position exchange, and content-preserving capacity operations are body-proved.
+The proof matrix covers `no_std`, default `std`, and all features.
+
+This is a positional order proof, not a hash-table or key-uniqueness proof.
+Hash/equality coherence, key lookup and insertion, entry APIs, iterators,
+sorting, draining, raw and disjoint access, and optional adapters remain outside
+proof translation. Random-state construction is the sole narrow trusted body;
+its contract asserts only that the result is empty. Full boundaries and the
+removal condition are recorded in `PROVENANCE.md`.
 
 ### heapless 0.9.2
 
