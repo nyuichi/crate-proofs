@@ -1,3 +1,5 @@
+#![allow(dead_code)]
+
 extern crate creusot_std;
 use crate::Adler32;
 #[allow(unused_imports)]
@@ -10,6 +12,52 @@ use std::ops::{AddAssign, MulAssign, RemAssign};
 #[logic(open)]
 fn adler_congruent(left: Int, right: Int) -> bool {
     pearlite! { exists<factor: Int> left == right + factor * 65521 }
+}
+
+#[logic(open)]
+fn scalar_b_state(b: Int, initial_a: Int, initial_b: Int, count: Int, bytes: Seq<u8>) -> bool {
+    pearlite! { b == (initial_b + count * initial_a
+    + crate::adler32_weighted_sum(bytes)) % 65521 }
+}
+
+#[logic]
+#[variant(bytes.len())]
+#[requires(0 <= initial_a)]
+#[ensures(0 <= result && result < 65521)]
+fn scalar_a_fold(initial_a: Int, bytes: Seq<u8>) -> Int {
+    if bytes.len() == 0 {
+        initial_a % 65521
+    } else {
+        let prefix = bytes.subsequence(0, bytes.len() - 1);
+        (scalar_a_fold(initial_a, prefix) + bytes[bytes.len() - 1].deep_model()) % 65521
+    }
+}
+
+#[logic]
+#[variant(bytes.len())]
+#[requires(0 <= initial_a && 0 <= initial_b)]
+#[ensures(0 <= result && result < 65521)]
+fn scalar_b_fold(initial_a: Int, initial_b: Int, bytes: Seq<u8>) -> Int {
+    if bytes.len() == 0 {
+        initial_b % 65521
+    } else {
+        let prefix = bytes.subsequence(0, bytes.len() - 1);
+        (scalar_b_fold(initial_a, initial_b, prefix) + scalar_a_fold(initial_a, bytes)) % 65521
+    }
+}
+
+#[logic]
+#[requires(0 <= initial_a && 0 <= initial_b)]
+#[requires(complete == prefix.push_back(byte))]
+#[ensures(scalar_a_fold(initial_a, complete)
+    == (scalar_a_fold(initial_a, prefix) + byte@) % 65521)]
+#[ensures(scalar_b_fold(initial_a, initial_b, complete)
+    == (scalar_b_fold(initial_a, initial_b, prefix)
+        + scalar_a_fold(initial_a, complete)) % 65521)]
+fn scalar_fold_push(initial_a: Int, initial_b: Int, prefix: Seq<u8>, complete: Seq<u8>, byte: u8) {
+    proof_assert!(complete.len() == prefix.len() + 1);
+    proof_assert!(complete.subsequence(0, complete.len() - 1) == prefix);
+    proof_assert!(complete[complete.len() - 1] == byte);
 }
 
 #[logic]
@@ -27,6 +75,14 @@ fn adler_congruent_add(left1: Int, right1: Int, left2: Int, right2: Int) {}
 #[requires(adler_congruent(second, third))]
 #[ensures(adler_congruent(first, third))]
 fn adler_congruent_trans(first: Int, second: Int, third: Int) {}
+
+#[logic]
+#[requires(adler_congruent(left, right))]
+#[ensures(adler_congruent(right, left))]
+fn adler_congruent_symm(left: Int, right: Int) {
+    proof_assert!(forall<factor: Int> left == right + factor * 65521 ==>
+        right == left + (-factor) * 65521);
+}
 
 #[logic]
 #[requires(adler_congruent(left, right))]
@@ -87,6 +143,11 @@ fn adler_remainder_congruent(value: Int) {
     proof_assert!(value == 65521 * (value / 65521) + value % 65521);
     proof_assert!(exists<factor: Int> value % 65521 == value + factor * 65521);
 }
+
+#[logic]
+#[requires(0 <= value)]
+#[ensures(0 <= value % 65521 && value % 65521 < 65521)]
+fn adler_remainder_range(value: Int) {}
 
 #[logic]
 #[requires(adler_congruent(left, right))]
@@ -187,6 +248,35 @@ fn lane_sum_concat(left: Seq<u8>, right: Seq<u8>, lane: Int) {
 fn multiplication_successor(count: Int, value: Int) {}
 
 #[logic]
+#[requires(value >= 4 && value % 4 == 0)]
+#[ensures((value - 4) % 4 == 0)]
+#[ensures(value / 4 == (value - 4) / 4 + 1)]
+fn multiple_of_four_predecessor(value: Int) {}
+
+#[logic]
+#[requires(right_groups == prefix_groups + 1)]
+#[requires(all_sum == left_sum + right_sum)]
+#[requires(left_prefix_acc
+    == left_acc + prefix_groups * left_sum + prefix_acc)]
+#[requires(all_acc == left_prefix_acc + all_sum)]
+#[requires(right_acc == prefix_acc + right_sum)]
+#[ensures(all_acc == left_acc + right_groups * left_sum + right_acc)]
+fn lane_accumulator_concat_arithmetic(
+    right_groups: Int,
+    prefix_groups: Int,
+    all_sum: Int,
+    left_sum: Int,
+    right_sum: Int,
+    left_prefix_acc: Int,
+    left_acc: Int,
+    prefix_acc: Int,
+    all_acc: Int,
+    right_acc: Int,
+) {
+    multiplication_successor(prefix_groups, left_sum);
+}
+
+#[logic]
 #[variant(right.len())]
 #[requires(left.len() % 4 == 0 && right.len() % 4 == 0)]
 #[requires(0 <= lane && lane < 4)]
@@ -197,6 +287,9 @@ fn multiplication_successor(count: Int, value: Int) {}
 fn lane_accumulator_concat(left: Seq<u8>, right: Seq<u8>, lane: Int) {
     if right.len() >= 4 {
         let prefix = right.subsequence(0, right.len() - 4);
+        multiple_of_four_predecessor(right.len());
+        proof_assert!(prefix.len() == right.len() - 4);
+        proof_assert!(prefix.len() % 4 == 0);
         lane_sum_concat(left, right, lane);
         lane_sum_concat(left, prefix, lane);
         lane_accumulator_concat(left, prefix, lane);
@@ -215,12 +308,30 @@ fn lane_accumulator_concat(left: Seq<u8>, right: Seq<u8>, lane: Int) {
         proof_assert!(
             lane_accumulator(right, lane) == lane_accumulator(prefix, lane) + lane_sum(right, lane)
         );
+        lane_accumulator_concat_arithmetic(
+            right.len() / 4,
+            prefix.len() / 4,
+            lane_sum(left.concat(right), lane),
+            lane_sum(left, lane),
+            lane_sum(right, lane),
+            lane_accumulator(left.concat(prefix), lane),
+            lane_accumulator(left, lane),
+            lane_accumulator(prefix, lane),
+            lane_accumulator(left.concat(right), lane),
+            lane_accumulator(right, lane),
+        );
         proof_assert!(
             lane_accumulator(left.concat(right), lane)
                 == lane_accumulator(left, lane)
                     + (right.len() / 4) * lane_sum(left, lane)
                     + lane_accumulator(right, lane)
         );
+    } else {
+        proof_assert!(right.len() == 0);
+        proof_assert!(right == Seq::empty());
+        proof_assert!(left.concat(right) == left);
+        proof_assert!(right.len() / 4 == 0);
+        proof_assert!(lane_accumulator(right, lane) == 0);
     }
 }
 
@@ -371,10 +482,68 @@ fn lane_pre_facts(
         old_a + byte == initial_a + new_sum
             && old_b + old_a + byte
                 == initial_b + (n + 1) * initial_a + new_accumulator
+            && old_a + byte <= initial_a + (n + 1) * 255
             && 2 * (old_b + old_a + byte)
                 <= 2 * initial_b + 2 * (n + 1) * initial_a
                     + 255 * (n + 1) * (n + 2)
     }
+}
+
+#[logic(open)]
+fn lane_post_facts(
+    group_count: Int,
+    initial_a: Int,
+    initial_b: Int,
+    updated_a: Int,
+    updated_b: Int,
+    new_sum: Int,
+    new_accumulator: Int,
+) -> bool {
+    pearlite! {
+        updated_a == initial_a + new_sum
+            && updated_b == initial_b + group_count * initial_a + new_accumulator
+            && updated_a <= initial_a + group_count * 255
+            && 2 * updated_b <= 2 * initial_b + 2 * group_count * initial_a
+                + 255 * group_count * (group_count + 1)
+    }
+}
+
+#[logic]
+#[requires(lane_pre_facts(
+    old_group,
+    initial_a,
+    initial_b,
+    old_a,
+    old_b,
+    byte,
+    new_sum,
+    new_accumulator
+))]
+#[requires(updated_a == old_a + byte)]
+#[requires(updated_b == old_b + updated_a)]
+#[requires(new_group == old_group + 1)]
+#[ensures(lane_post_facts(
+    new_group,
+    initial_a,
+    initial_b,
+    updated_a,
+    updated_b,
+    new_sum,
+    new_accumulator
+))]
+fn lane_finish_iteration(
+    old_group: Int,
+    new_group: Int,
+    initial_a: Int,
+    initial_b: Int,
+    old_a: Int,
+    old_b: Int,
+    byte: Int,
+    updated_a: Int,
+    updated_b: Int,
+    new_sum: Int,
+    new_accumulator: Int,
+) {
 }
 
 #[logic]
@@ -429,8 +598,8 @@ fn reduced_state_facts(a: Int, b: Int) -> bool {
 }
 
 #[logic]
-#[requires(0 <= a && a < 65521)]
-#[requires(0 <= b && b < 65521)]
+#[requires(0 <= a && a <= u16::MAX@)]
+#[requires(0 <= b && b <= u16::MAX@)]
 #[ensures(b + 22208 * a <= u32::MAX@)]
 fn initial_state_safe(a: Int, b: Int) {}
 
@@ -438,6 +607,347 @@ fn initial_state_safe(a: Int, b: Int) {}
 #[requires(0 <= a && a <= u16::MAX@ && 0 <= b)]
 #[ensures(reduced_state_facts(a, b))]
 fn reduced_state_safe(a: Int, b: Int) {}
+
+#[logic]
+#[requires(adler_congruent(a, model_a))]
+#[requires(adler_congruent(b, model_b))]
+#[requires(0 <= byte)]
+#[ensures(adler_congruent((a + byte) % 65521, model_a + byte))]
+#[ensures(adler_congruent(
+    (b + (a + byte) % 65521) % 65521,
+    model_b + model_a + byte,
+))]
+fn scalar_step_congruent(a: Int, b: Int, byte: Int, model_a: Int, model_b: Int) {
+    adler_congruent_refl(byte);
+    adler_congruent_add(a, model_a, byte, byte);
+    adler_remainder_congruent(a + byte);
+    adler_congruent_trans((a + byte) % 65521, a + byte, model_a + byte);
+    adler_congruent_add(b, model_b, (a + byte) % 65521, model_a + byte);
+    adler_remainder_congruent(b + (a + byte) % 65521);
+    adler_congruent_trans(
+        (b + (a + byte) % 65521) % 65521,
+        b + (a + byte) % 65521,
+        model_b + model_a + byte,
+    );
+}
+
+#[logic]
+#[requires(adler_congruent(old_a, initial_a + old_sum))]
+#[requires(adler_congruent(
+    old_b,
+    initial_b + (count - 1) * initial_a + old_weighted,
+))]
+#[requires(new_sum == old_sum + byte)]
+#[requires(new_weighted == old_weighted + old_sum + byte)]
+#[requires(0 <= byte)]
+#[ensures(adler_congruent(
+    (old_a + byte) % 65521,
+    initial_a + new_sum,
+))]
+#[ensures(adler_congruent(
+    (old_b + (old_a + byte) % 65521) % 65521,
+    initial_b + count * initial_a + new_weighted,
+))]
+fn scalar_iteration_congruent(
+    count: Int,
+    initial_a: Int,
+    initial_b: Int,
+    old_a: Int,
+    old_b: Int,
+    byte: Int,
+    old_sum: Int,
+    old_weighted: Int,
+    new_sum: Int,
+    new_weighted: Int,
+) {
+    scalar_step_congruent(
+        old_a,
+        old_b,
+        byte,
+        initial_a + old_sum,
+        initial_b + (count - 1) * initial_a + old_weighted,
+    );
+}
+
+#[logic]
+#[requires(0 < count && count <= bytes.len())]
+#[requires(byte == bytes[count - 1])]
+#[ensures(bytes.subsequence(0, count)
+    == bytes.subsequence(0, count - 1).push_back(byte))]
+fn sequence_prefix_push(bytes: Seq<u8>, count: Int, byte: u8) {
+    let complete = bytes.subsequence(0, count);
+    let prefix = bytes.subsequence(0, count - 1);
+    proof_assert!(complete.len() == count);
+    proof_assert!(prefix.push_back(byte).len() == count);
+    proof_assert!(complete.ext_eq(prefix.push_back(byte)));
+}
+
+#[logic]
+#[requires(count == offset + 1)]
+#[requires(adler_congruent(
+    old_a,
+    initial_a + crate::adler32_byte_sum(prefix),
+))]
+#[requires(adler_congruent(
+    old_b,
+    initial_b + offset * initial_a
+        + crate::adler32_weighted_sum(prefix),
+))]
+#[requires(new_a == (old_a + byte@) % 65521)]
+#[requires(new_b == (old_b + new_a) % 65521)]
+#[requires(complete == prefix.push_back(byte))]
+#[ensures(adler_congruent(
+    new_a,
+    initial_a + crate::adler32_byte_sum(complete),
+))]
+#[ensures(adler_congruent(
+    new_b,
+    initial_b + count * initial_a
+        + crate::adler32_weighted_sum(complete),
+))]
+fn scalar_sequence_iteration_congruent(
+    count: Int,
+    offset: Int,
+    initial_a: Int,
+    initial_b: Int,
+    old_a: Int,
+    old_b: Int,
+    new_a: Int,
+    new_b: Int,
+    prefix: Seq<u8>,
+    complete: Seq<u8>,
+    byte: u8,
+) {
+    crate::adler32_byte_sum_push(prefix, byte);
+    crate::adler32_weighted_sum_push(prefix, byte);
+    proof_assert!(count - 1 == offset);
+    scalar_iteration_congruent(
+        count,
+        initial_a,
+        initial_b,
+        old_a,
+        old_b,
+        byte.deep_model(),
+        crate::adler32_byte_sum(prefix),
+        crate::adler32_weighted_sum(prefix),
+        crate::adler32_byte_sum(complete),
+        crate::adler32_weighted_sum(complete),
+    );
+}
+
+#[logic]
+#[requires(count == offset + 1)]
+#[requires(0 <= offset)]
+#[requires(0 <= initial_a && 0 <= initial_b && 0 <= weighted)]
+#[ensures(0 <= initial_b + count * initial_a + weighted)]
+fn scalar_complete_b_nonnegative(
+    count: Int,
+    offset: Int,
+    initial_a: Int,
+    initial_b: Int,
+    weighted: Int,
+) {
+}
+
+#[logic]
+#[requires(count == offset + 1)]
+#[requires(0 <= offset)]
+#[requires(0 <= initial_a && 0 <= initial_b)]
+#[requires(0 <= old_a && 0 <= old_b && 0 <= new_a && 0 <= new_b)]
+#[requires(old_a
+    == (initial_a + crate::adler32_byte_sum(prefix)) % 65521)]
+#[requires(scalar_b_state(old_b, initial_a, initial_b, offset, prefix))]
+#[requires(new_a == (old_a + byte@) % 65521)]
+#[requires(new_b == (old_b + new_a) % 65521)]
+#[requires(complete == prefix.push_back(byte))]
+#[ensures(new_a
+    == (initial_a + crate::adler32_byte_sum(complete)) % 65521)]
+#[ensures(new_b
+    == (initial_b + count * initial_a
+        + crate::adler32_weighted_sum(complete)) % 65521)]
+fn scalar_sequence_iteration_exact(
+    count: Int,
+    offset: Int,
+    initial_a: Int,
+    initial_b: Int,
+    old_a: Int,
+    old_b: Int,
+    new_a: Int,
+    new_b: Int,
+    prefix: Seq<u8>,
+    complete: Seq<u8>,
+    byte: u8,
+) {
+    let model_a = initial_a + crate::adler32_byte_sum(prefix);
+    let model_b = initial_b + offset * initial_a + crate::adler32_weighted_sum(prefix);
+    adler_remainder_congruent(model_a);
+    adler_remainder_congruent(model_b);
+    proof_assert!(adler_congruent(old_a, model_a));
+    proof_assert!(adler_congruent(old_b, model_b));
+    scalar_sequence_iteration_congruent(
+        count, offset, initial_a, initial_b, old_a, old_b, new_a, new_b, prefix, complete, byte,
+    );
+
+    let complete_a = initial_a + crate::adler32_byte_sum(complete);
+    let complete_b = initial_b + count * initial_a + crate::adler32_weighted_sum(complete);
+    crate::adler32_byte_sum_nonnegative(complete);
+    crate::adler32_weighted_sum_nonnegative(complete);
+    scalar_complete_b_nonnegative(
+        count,
+        offset,
+        initial_a,
+        initial_b,
+        crate::adler32_weighted_sum(complete),
+    );
+    adler_remainder_congruent(complete_a);
+    adler_remainder_congruent(complete_b);
+    adler_congruent_symm(complete_a % 65521, complete_a);
+    adler_congruent_symm(complete_b % 65521, complete_b);
+    adler_congruent_trans(new_a, complete_a, complete_a % 65521);
+    adler_congruent_trans(new_b, complete_b, complete_b % 65521);
+    adler_remainder_range(old_a + byte.deep_model());
+    adler_remainder_range(old_b + new_a);
+    adler_remainder_range(complete_a);
+    adler_remainder_range(complete_b);
+    adler_congruent_reduced(new_a, complete_a % 65521);
+    adler_congruent_reduced(new_b, complete_b % 65521);
+}
+
+#[logic]
+#[requires(count == offset + 1)]
+#[requires(0 <= offset)]
+#[requires(0 <= initial_a && 0 <= initial_b)]
+#[requires(0 <= old_a && 0 <= old_b && 0 <= new_a && 0 <= new_b)]
+#[requires(old_a
+    == (initial_a + crate::adler32_byte_sum(prefix)) % 65521)]
+#[requires(scalar_b_state(old_b, initial_a, initial_b, offset, prefix))]
+#[requires(new_a == (old_a + byte@) % 65521)]
+#[requires(new_b == (old_b + new_a) % 65521)]
+#[requires(complete == prefix.push_back(byte))]
+#[ensures(scalar_b_state(new_b, initial_a, initial_b, count, complete))]
+fn scalar_sequence_iteration_b_exact(
+    count: Int,
+    offset: Int,
+    initial_a: Int,
+    initial_b: Int,
+    old_a: Int,
+    old_b: Int,
+    new_a: Int,
+    new_b: Int,
+    prefix: Seq<u8>,
+    complete: Seq<u8>,
+    byte: u8,
+) {
+    scalar_sequence_iteration_exact(
+        count, offset, initial_a, initial_b, old_a, old_b, new_a, new_b, prefix, complete, byte,
+    );
+}
+
+#[logic]
+#[variant(bytes.len())]
+#[requires(0 <= initial_a && 0 <= initial_b)]
+#[ensures(scalar_a_fold(initial_a, bytes)
+    == (initial_a + crate::adler32_byte_sum(bytes)) % 65521)]
+#[ensures(scalar_b_state(
+    scalar_b_fold(initial_a, initial_b, bytes),
+    initial_a,
+    initial_b,
+    bytes.len(),
+    bytes,
+))]
+fn scalar_fold_equivalent(initial_a: Int, initial_b: Int, bytes: Seq<u8>) {
+    if bytes.len() == 0 {
+        proof_assert!(crate::adler32_byte_sum(bytes) == 0);
+        proof_assert!(crate::adler32_weighted_sum(bytes) == 0);
+    } else {
+        let count = bytes.len();
+        let offset = count - 1;
+        let prefix = bytes.subsequence(0, offset);
+        let byte = bytes[offset];
+        proof_assert!(prefix.len() == offset);
+        scalar_fold_equivalent(initial_a, initial_b, prefix);
+        sequence_prefix_push(bytes, count, byte);
+        scalar_fold_push(initial_a, initial_b, prefix, bytes, byte);
+        scalar_sequence_iteration_exact(
+            count,
+            offset,
+            initial_a,
+            initial_b,
+            scalar_a_fold(initial_a, prefix),
+            scalar_b_fold(initial_a, initial_b, prefix),
+            scalar_a_fold(initial_a, bytes),
+            scalar_b_fold(initial_a, initial_b, bytes),
+            prefix,
+            bytes,
+            byte,
+        );
+    }
+}
+
+#[logic]
+#[requires(count == offset)]
+#[requires(complete == current)]
+#[requires(a == (initial_a + crate::adler32_byte_sum(complete)) % 65521)]
+#[requires(b == (initial_b + count * initial_a
+    + crate::adler32_weighted_sum(complete)) % 65521)]
+#[ensures(a == (initial_a + crate::adler32_byte_sum(current)) % 65521)]
+#[ensures(b == (initial_b + offset * initial_a
+    + crate::adler32_weighted_sum(current)) % 65521)]
+fn scalar_count_rewrite(
+    count: Int,
+    offset: Int,
+    initial_a: Int,
+    initial_b: Int,
+    a: Int,
+    b: Int,
+    complete: Seq<u8>,
+    current: Seq<u8>,
+) {
+}
+
+#[logic]
+#[requires(count == offset)]
+#[requires(complete == current)]
+#[requires(b == (initial_b + count * initial_a
+    + crate::adler32_weighted_sum(complete)) % 65521)]
+#[ensures(b == (initial_b + offset * initial_a
+    + crate::adler32_weighted_sum(current)) % 65521)]
+fn scalar_count_rewrite_b(
+    count: Int,
+    offset: Int,
+    initial_a: Int,
+    initial_b: Int,
+    b: Int,
+    complete: Seq<u8>,
+    current: Seq<u8>,
+) {
+}
+
+/// Applies one four-byte group after the caller has established that neither
+/// vector addition can overflow.  This keeps the mutable vector update out of
+/// the sequence-heavy proof in `process_chunk`.
+#[inline]
+#[requires((*a_vec).invariant() && (*b_vec).invariant() && val.invariant())]
+#[requires((*a_vec)@.0@ + val@.0@ <= u32::MAX@
+    && (*a_vec)@.1@ + val@.1@ <= u32::MAX@
+    && (*a_vec)@.2@ + val@.2@ <= u32::MAX@
+    && (*a_vec)@.3@ + val@.3@ <= u32::MAX@)]
+#[requires((*b_vec)@.0@ + (*a_vec)@.0@ + val@.0@ <= u32::MAX@
+    && (*b_vec)@.1@ + (*a_vec)@.1@ + val@.1@ <= u32::MAX@
+    && (*b_vec)@.2@ + (*a_vec)@.2@ + val@.2@ <= u32::MAX@
+    && (*b_vec)@.3@ + (*a_vec)@.3@ + val@.3@ <= u32::MAX@)]
+#[ensures((^a_vec)@.0@ == (*a_vec)@.0@ + val@.0@
+    && (^a_vec)@.1@ == (*a_vec)@.1@ + val@.1@
+    && (^a_vec)@.2@ == (*a_vec)@.2@ + val@.2@
+    && (^a_vec)@.3@ == (*a_vec)@.3@ + val@.3@)]
+#[ensures((^b_vec)@.0@ == (*b_vec)@.0@ + (*a_vec)@.0@ + val@.0@
+    && (^b_vec)@.1@ == (*b_vec)@.1@ + (*a_vec)@.1@ + val@.1@
+    && (^b_vec)@.2@ == (*b_vec)@.2@ + (*a_vec)@.2@ + val@.2@
+    && (^b_vec)@.3@ == (*b_vec)@.3@ + (*a_vec)@.3@ + val@.3@)]
+fn process_group(a_vec: &mut U32X4, b_vec: &mut U32X4, val: U32X4) {
+    *a_vec += val;
+    *b_vec += *a_vec;
+}
 
 #[inline]
 #[requires(chunk@.len() % 4 == 0 && chunk@.len() <= 22208)]
@@ -452,6 +962,7 @@ fn reduced_state_safe(a: Int, b: Int) {}
 #[ensures((^b_vec)@.1@ == (*b_vec)@.1@ + chunk@.len() / 4 * (*a_vec)@.1@ + lane_accumulator(chunk@, 1))]
 #[ensures((^b_vec)@.2@ == (*b_vec)@.2@ + chunk@.len() / 4 * (*a_vec)@.2@ + lane_accumulator(chunk@, 2))]
 #[ensures((^b_vec)@.3@ == (*b_vec)@.3@ + chunk@.len() / 4 * (*a_vec)@.3@ + lane_accumulator(chunk@, 3))]
+#[allow(unused_variables, unused_assignments)]
 fn process_chunk(a_vec: &mut U32X4, b_vec: &mut U32X4, chunk: &[u8]) {
     let a_vec_entry = snapshot! { *a_vec };
     let b_vec_entry = snapshot! { *b_vec };
@@ -488,209 +999,214 @@ fn process_chunk(a_vec: &mut U32X4, b_vec: &mut U32X4, chunk: &[u8]) {
             u32::from(chunk[offset + 3]),
         ]);
         let groups = snapshot! { group_count@ };
+        let next_offset = snapshot! { offset@ + 4 };
+        let complete = snapshot! { chunk@.subsequence(0, *next_offset) };
+        let a_vec_before = snapshot! { *a_vec };
+        let b_vec_before = snapshot! { *b_vec };
         proof_assert! { chunk_iteration_safe(*groups, a_vec_entry@.0@, b_vec_entry@.0@, a_vec@.0@, b_vec@.0@, val@.0@); chunk_iteration_facts(*groups, a_vec_entry@.0@, b_vec_entry@.0@, a_vec@.0@, b_vec@.0@, val@.0@) };
         proof_assert! { chunk_iteration_safe(*groups, a_vec_entry@.1@, b_vec_entry@.1@, a_vec@.1@, b_vec@.1@, val@.1@); chunk_iteration_facts(*groups, a_vec_entry@.1@, b_vec_entry@.1@, a_vec@.1@, b_vec@.1@, val@.1@) };
         proof_assert! { chunk_iteration_safe(*groups, a_vec_entry@.2@, b_vec_entry@.2@, a_vec@.2@, b_vec@.2@, val@.2@); chunk_iteration_facts(*groups, a_vec_entry@.2@, b_vec_entry@.2@, a_vec@.2@, b_vec@.2@, val@.2@) };
         proof_assert! { chunk_iteration_safe(*groups, a_vec_entry@.3@, b_vec_entry@.3@, a_vec@.3@, b_vec@.3@, val@.3@); chunk_iteration_facts(*groups, a_vec_entry@.3@, b_vec_entry@.3@, a_vec@.3@, b_vec@.3@, val@.3@) };
-        let a_vec_before = snapshot! { *a_vec };
-        let b_vec_before = snapshot! { *b_vec };
+        proof_assert! { lane_iteration_bound(*groups, a_vec_entry@.0@, b_vec_entry@.0@, a_vec_before@.0@, b_vec_before@.0@, val@.0@); true };
+        proof_assert! { lane_iteration_bound(*groups, a_vec_entry@.1@, b_vec_entry@.1@, a_vec_before@.1@, b_vec_before@.1@, val@.1@); true };
+        proof_assert! { lane_iteration_bound(*groups, a_vec_entry@.2@, b_vec_entry@.2@, a_vec_before@.2@, b_vec_before@.2@, val@.2@); true };
+        proof_assert! { lane_iteration_bound(*groups, a_vec_entry@.3@, b_vec_entry@.3@, a_vec_before@.3@, b_vec_before@.3@, val@.3@); true };
         proof_assert! {
             let prefix = chunk@.subsequence(0, offset@);
-            let complete = chunk@.subsequence(0, offset@ + 4);
             lane_subsequence_step(chunk@, offset@, 0);
-            lane_iteration_prepare(*groups, a_vec_entry@.0@, b_vec_entry@.0@, a_vec_before@.0@, b_vec_before@.0@, lane_sum(prefix, 0), lane_accumulator(prefix, 0), val@.0@, lane_sum(complete, 0), lane_accumulator(complete, 0));
-            lane_pre_facts(*groups, a_vec_entry@.0@, b_vec_entry@.0@, a_vec_before@.0@, b_vec_before@.0@, val@.0@, lane_sum(complete, 0), lane_accumulator(complete, 0))
+            lane_iteration_prepare(*groups, a_vec_entry@.0@, b_vec_entry@.0@, a_vec_before@.0@, b_vec_before@.0@, lane_sum(prefix, 0), lane_accumulator(prefix, 0), val@.0@, lane_sum(*complete, 0), lane_accumulator(*complete, 0));
+            lane_finish_iteration(*groups, *groups + 1, a_vec_entry@.0@, b_vec_entry@.0@, a_vec_before@.0@, b_vec_before@.0@, val@.0@, a_vec_before@.0@ + val@.0@, b_vec_before@.0@ + a_vec_before@.0@ + val@.0@, lane_sum(*complete, 0), lane_accumulator(*complete, 0));
+            lane_post_facts(*groups + 1, a_vec_entry@.0@, b_vec_entry@.0@, a_vec_before@.0@ + val@.0@, b_vec_before@.0@ + a_vec_before@.0@ + val@.0@, lane_sum(*complete, 0), lane_accumulator(*complete, 0))
         };
         proof_assert! {
             let prefix = chunk@.subsequence(0, offset@);
-            let complete = chunk@.subsequence(0, offset@ + 4);
             lane_subsequence_step(chunk@, offset@, 1);
-            lane_iteration_prepare(*groups, a_vec_entry@.1@, b_vec_entry@.1@, a_vec_before@.1@, b_vec_before@.1@, lane_sum(prefix, 1), lane_accumulator(prefix, 1), val@.1@, lane_sum(complete, 1), lane_accumulator(complete, 1));
-            lane_pre_facts(*groups, a_vec_entry@.1@, b_vec_entry@.1@, a_vec_before@.1@, b_vec_before@.1@, val@.1@, lane_sum(complete, 1), lane_accumulator(complete, 1))
+            lane_iteration_prepare(*groups, a_vec_entry@.1@, b_vec_entry@.1@, a_vec_before@.1@, b_vec_before@.1@, lane_sum(prefix, 1), lane_accumulator(prefix, 1), val@.1@, lane_sum(*complete, 1), lane_accumulator(*complete, 1));
+            lane_finish_iteration(*groups, *groups + 1, a_vec_entry@.1@, b_vec_entry@.1@, a_vec_before@.1@, b_vec_before@.1@, val@.1@, a_vec_before@.1@ + val@.1@, b_vec_before@.1@ + a_vec_before@.1@ + val@.1@, lane_sum(*complete, 1), lane_accumulator(*complete, 1));
+            lane_post_facts(*groups + 1, a_vec_entry@.1@, b_vec_entry@.1@, a_vec_before@.1@ + val@.1@, b_vec_before@.1@ + a_vec_before@.1@ + val@.1@, lane_sum(*complete, 1), lane_accumulator(*complete, 1))
         };
         proof_assert! {
             let prefix = chunk@.subsequence(0, offset@);
-            let complete = chunk@.subsequence(0, offset@ + 4);
             lane_subsequence_step(chunk@, offset@, 2);
-            lane_iteration_prepare(*groups, a_vec_entry@.2@, b_vec_entry@.2@, a_vec_before@.2@, b_vec_before@.2@, lane_sum(prefix, 2), lane_accumulator(prefix, 2), val@.2@, lane_sum(complete, 2), lane_accumulator(complete, 2));
-            lane_pre_facts(*groups, a_vec_entry@.2@, b_vec_entry@.2@, a_vec_before@.2@, b_vec_before@.2@, val@.2@, lane_sum(complete, 2), lane_accumulator(complete, 2))
+            lane_iteration_prepare(*groups, a_vec_entry@.2@, b_vec_entry@.2@, a_vec_before@.2@, b_vec_before@.2@, lane_sum(prefix, 2), lane_accumulator(prefix, 2), val@.2@, lane_sum(*complete, 2), lane_accumulator(*complete, 2));
+            lane_finish_iteration(*groups, *groups + 1, a_vec_entry@.2@, b_vec_entry@.2@, a_vec_before@.2@, b_vec_before@.2@, val@.2@, a_vec_before@.2@ + val@.2@, b_vec_before@.2@ + a_vec_before@.2@ + val@.2@, lane_sum(*complete, 2), lane_accumulator(*complete, 2));
+            lane_post_facts(*groups + 1, a_vec_entry@.2@, b_vec_entry@.2@, a_vec_before@.2@ + val@.2@, b_vec_before@.2@ + a_vec_before@.2@ + val@.2@, lane_sum(*complete, 2), lane_accumulator(*complete, 2))
         };
         proof_assert! {
             let prefix = chunk@.subsequence(0, offset@);
-            let complete = chunk@.subsequence(0, offset@ + 4);
             lane_subsequence_step(chunk@, offset@, 3);
-            lane_iteration_prepare(*groups, a_vec_entry@.3@, b_vec_entry@.3@, a_vec_before@.3@, b_vec_before@.3@, lane_sum(prefix, 3), lane_accumulator(prefix, 3), val@.3@, lane_sum(complete, 3), lane_accumulator(complete, 3));
-            lane_pre_facts(*groups, a_vec_entry@.3@, b_vec_entry@.3@, a_vec_before@.3@, b_vec_before@.3@, val@.3@, lane_sum(complete, 3), lane_accumulator(complete, 3))
+            lane_iteration_prepare(*groups, a_vec_entry@.3@, b_vec_entry@.3@, a_vec_before@.3@, b_vec_before@.3@, lane_sum(prefix, 3), lane_accumulator(prefix, 3), val@.3@, lane_sum(*complete, 3), lane_accumulator(*complete, 3));
+            lane_finish_iteration(*groups, *groups + 1, a_vec_entry@.3@, b_vec_entry@.3@, a_vec_before@.3@, b_vec_before@.3@, val@.3@, a_vec_before@.3@ + val@.3@, b_vec_before@.3@ + a_vec_before@.3@ + val@.3@, lane_sum(*complete, 3), lane_accumulator(*complete, 3));
+            lane_post_facts(*groups + 1, a_vec_entry@.3@, b_vec_entry@.3@, a_vec_before@.3@ + val@.3@, b_vec_before@.3@ + a_vec_before@.3@ + val@.3@, lane_sum(*complete, 3), lane_accumulator(*complete, 3))
         };
-        proof_assert!(a_vec@.0@ + val@.0@ <= u32::MAX@ && a_vec@.1@ + val@.1@ <= u32::MAX@ && a_vec@.2@ + val@.2@ <= u32::MAX@ && a_vec@.3@ + val@.3@ <= u32::MAX@);
-        *a_vec += val;
-        proof_assert!(a_vec@.0@ == a_vec_before@.0@ + val@.0@);
-        proof_assert!(a_vec@.1@ == a_vec_before@.1@ + val@.1@);
-        proof_assert!(a_vec@.2@ == a_vec_before@.2@ + val@.2@);
-        proof_assert!(a_vec@.3@ == a_vec_before@.3@ + val@.3@);
-        proof_assert!(b_vec@.0@ + a_vec@.0@ <= u32::MAX@);
-        proof_assert!(b_vec@.1@ + a_vec@.1@ <= u32::MAX@);
-        proof_assert!(b_vec@.2@ + a_vec@.2@ <= u32::MAX@);
-        proof_assert!(b_vec@.3@ + a_vec@.3@ <= u32::MAX@);
-        *b_vec += *a_vec;
-        proof_assert!(b_vec@.0@ == b_vec_before@.0@ + a_vec@.0@);
-        proof_assert!(b_vec@.1@ == b_vec_before@.1@ + a_vec@.1@);
-        proof_assert!(b_vec@.2@ == b_vec_before@.2@ + a_vec@.2@);
-        proof_assert!(b_vec@.3@ == b_vec_before@.3@ + a_vec@.3@);
+        process_group(a_vec, b_vec, val);
         offset += 4;
         group_count += 1;
+        proof_assert!(offset@ == *next_offset);
         proof_assert!(group_count@ == *groups + 1);
-        proof_assert!(group_count@ + 1 == *groups + 2);
-        proof_assert!(group_count@ * (group_count@ + 1)
-            == (*groups + 1) * (*groups + 2));
-        proof_assert!(group_count@ * a_vec_entry@.0@
-            == (*groups + 1) * a_vec_entry@.0@);
-        proof_assert!(group_count@ * a_vec_entry@.1@
-            == (*groups + 1) * a_vec_entry@.1@);
-        proof_assert!(group_count@ * a_vec_entry@.2@
-            == (*groups + 1) * a_vec_entry@.2@);
-        proof_assert!(group_count@ * a_vec_entry@.3@
-            == (*groups + 1) * a_vec_entry@.3@);
-        proof_assert!(b_vec@.0@
-            == b_vec_before@.0@ + a_vec_before@.0@ + val@.0@);
-        proof_assert!(b_vec@.1@
-            == b_vec_before@.1@ + a_vec_before@.1@ + val@.1@);
-        proof_assert!(b_vec@.2@
-            == b_vec_before@.2@ + a_vec_before@.2@ + val@.2@);
-        proof_assert!(b_vec@.3@
-            == b_vec_before@.3@ + a_vec_before@.3@ + val@.3@);
         proof_assert! {
-            let complete = chunk@.subsequence(0, offset@);
-            lane_pre_facts(*groups, a_vec_entry@.0@, b_vec_entry@.0@, a_vec_before@.0@, b_vec_before@.0@, val@.0@, lane_sum(complete, 0), lane_accumulator(complete, 0))
+            lane_post_facts(
+                group_count@, a_vec_entry@.0@, b_vec_entry@.0@,
+                a_vec@.0@, b_vec@.0@,
+                lane_sum(*complete, 0), lane_accumulator(*complete, 0),
+            )
         };
         proof_assert! {
-            let complete = chunk@.subsequence(0, offset@);
-            lane_pre_facts(*groups, a_vec_entry@.1@, b_vec_entry@.1@, a_vec_before@.1@, b_vec_before@.1@, val@.1@, lane_sum(complete, 1), lane_accumulator(complete, 1))
+            lane_post_facts(
+                group_count@, a_vec_entry@.1@, b_vec_entry@.1@,
+                a_vec@.1@, b_vec@.1@,
+                lane_sum(*complete, 1), lane_accumulator(*complete, 1),
+            )
         };
         proof_assert! {
-            let complete = chunk@.subsequence(0, offset@);
-            lane_pre_facts(*groups, a_vec_entry@.2@, b_vec_entry@.2@, a_vec_before@.2@, b_vec_before@.2@, val@.2@, lane_sum(complete, 2), lane_accumulator(complete, 2))
+            lane_post_facts(
+                group_count@, a_vec_entry@.2@, b_vec_entry@.2@,
+                a_vec@.2@, b_vec@.2@,
+                lane_sum(*complete, 2), lane_accumulator(*complete, 2),
+            )
         };
         proof_assert! {
-            let complete = chunk@.subsequence(0, offset@);
-            lane_pre_facts(*groups, a_vec_entry@.3@, b_vec_entry@.3@, a_vec_before@.3@, b_vec_before@.3@, val@.3@, lane_sum(complete, 3), lane_accumulator(complete, 3))
+            lane_post_facts(
+                group_count@, a_vec_entry@.3@, b_vec_entry@.3@,
+                a_vec@.3@, b_vec@.3@,
+                lane_sum(*complete, 3), lane_accumulator(*complete, 3),
+            )
         };
-        proof_assert! {
-            let complete = chunk@.subsequence(0, offset@);
-            a_vec_before@.0@ + val@.0@
-                == a_vec_entry@.0@ + lane_sum(complete, 0)
-        };
-        proof_assert! {
-            let complete = chunk@.subsequence(0, offset@);
-            b_vec_before@.0@ + a_vec_before@.0@ + val@.0@
-                == b_vec_entry@.0@ + (*groups + 1) * a_vec_entry@.0@
-                    + lane_accumulator(complete, 0)
-        };
-        proof_assert!(2 * (b_vec_before@.0@ + a_vec_before@.0@ + val@.0@)
-            <= 2 * b_vec_entry@.0@ + 2 * (*groups + 1) * a_vec_entry@.0@
-                + 255 * (*groups + 1) * (*groups + 2));
-        proof_assert! {
-            let complete = chunk@.subsequence(0, offset@);
-            a_vec_before@.1@ + val@.1@
-                == a_vec_entry@.1@ + lane_sum(complete, 1)
-        };
-        proof_assert! {
-            let complete = chunk@.subsequence(0, offset@);
-            b_vec_before@.1@ + a_vec_before@.1@ + val@.1@
-                == b_vec_entry@.1@ + (*groups + 1) * a_vec_entry@.1@
-                    + lane_accumulator(complete, 1)
-        };
-        proof_assert!(2 * (b_vec_before@.1@ + a_vec_before@.1@ + val@.1@)
-            <= 2 * b_vec_entry@.1@ + 2 * (*groups + 1) * a_vec_entry@.1@
-                + 255 * (*groups + 1) * (*groups + 2));
-        proof_assert! {
-            let complete = chunk@.subsequence(0, offset@);
-            a_vec_before@.2@ + val@.2@
-                == a_vec_entry@.2@ + lane_sum(complete, 2)
-        };
-        proof_assert! {
-            let complete = chunk@.subsequence(0, offset@);
-            b_vec_before@.2@ + a_vec_before@.2@ + val@.2@
-                == b_vec_entry@.2@ + (*groups + 1) * a_vec_entry@.2@
-                    + lane_accumulator(complete, 2)
-        };
-        proof_assert!(2 * (b_vec_before@.2@ + a_vec_before@.2@ + val@.2@)
-            <= 2 * b_vec_entry@.2@ + 2 * (*groups + 1) * a_vec_entry@.2@
-                + 255 * (*groups + 1) * (*groups + 2));
-        proof_assert! {
-            let complete = chunk@.subsequence(0, offset@);
-            a_vec_before@.3@ + val@.3@
-                == a_vec_entry@.3@ + lane_sum(complete, 3)
-        };
-        proof_assert! {
-            let complete = chunk@.subsequence(0, offset@);
-            b_vec_before@.3@ + a_vec_before@.3@ + val@.3@
-                == b_vec_entry@.3@ + (*groups + 1) * a_vec_entry@.3@
-                    + lane_accumulator(complete, 3)
-        };
-        proof_assert!(2 * (b_vec_before@.3@ + a_vec_before@.3@ + val@.3@)
-            <= 2 * b_vec_entry@.3@ + 2 * (*groups + 1) * a_vec_entry@.3@
-                + 255 * (*groups + 1) * (*groups + 2));
-        proof_assert! {
-            let complete = chunk@.subsequence(0, offset@);
-            a_vec@.0@ == a_vec_entry@.0@ + lane_sum(complete, 0)
-        };
-        proof_assert! {
-            let complete = chunk@.subsequence(0, offset@);
-            b_vec@.0@ == b_vec_entry@.0@ + group_count@ * a_vec_entry@.0@
-                + lane_accumulator(complete, 0)
-        };
-        proof_assert!(2 * b_vec@.0@ <= 2 * b_vec_entry@.0@
-            + 2 * group_count@ * a_vec_entry@.0@
-            + 255 * group_count@ * (group_count@ + 1));
-        proof_assert! {
-            let complete = chunk@.subsequence(0, offset@);
-            a_vec@.1@ == a_vec_entry@.1@ + lane_sum(complete, 1)
-        };
-        proof_assert! {
-            let complete = chunk@.subsequence(0, offset@);
-            b_vec@.1@ == b_vec_entry@.1@ + group_count@ * a_vec_entry@.1@
-                + lane_accumulator(complete, 1)
-        };
-        proof_assert!(2 * b_vec@.1@ <= 2 * b_vec_entry@.1@
-            + 2 * group_count@ * a_vec_entry@.1@
-            + 255 * group_count@ * (group_count@ + 1));
-        proof_assert! {
-            let complete = chunk@.subsequence(0, offset@);
-            a_vec@.2@ == a_vec_entry@.2@ + lane_sum(complete, 2)
-        };
-        proof_assert! {
-            let complete = chunk@.subsequence(0, offset@);
-            b_vec@.2@ == b_vec_entry@.2@ + group_count@ * a_vec_entry@.2@
-                + lane_accumulator(complete, 2)
-        };
-        proof_assert!(2 * b_vec@.2@ <= 2 * b_vec_entry@.2@
-            + 2 * group_count@ * a_vec_entry@.2@
-            + 255 * group_count@ * (group_count@ + 1));
-        proof_assert! {
-            let complete = chunk@.subsequence(0, offset@);
-            a_vec@.3@ == a_vec_entry@.3@ + lane_sum(complete, 3)
-        };
-        proof_assert! {
-            let complete = chunk@.subsequence(0, offset@);
-            b_vec@.3@ == b_vec_entry@.3@ + group_count@ * a_vec_entry@.3@
-                + lane_accumulator(complete, 3)
-        };
-        proof_assert!(2 * b_vec@.3@ <= 2 * b_vec_entry@.3@
-            + 2 * group_count@ * a_vec_entry@.3@
-            + 255 * group_count@ * (group_count@ + 1));
     }
     proof_assert!(offset@ == chunk@.len());
     proof_assert!(group_count@ == chunk@.len() / 4);
     proof_assert!(chunk@.subsequence(0, offset@) == chunk@);
 }
 
+#[requires(offset@ < bytes@.len())]
+#[requires((*a)@ <= u16::MAX@ && (*b)@ <= u16::MAX@)]
+#[requires((*a)@ == scalar_a_fold(
+    initial_a@, bytes@.subsequence(0, offset@),
+))]
+#[requires((*b)@ == scalar_b_fold(
+    initial_a@, initial_b@, bytes@.subsequence(0, offset@),
+))]
+#[ensures((^a)@ < 65521 && (^b)@ < 65521)]
+#[ensures((^a)@ == scalar_a_fold(
+    initial_a@, bytes@.subsequence(0, offset@ + 1),
+))]
+#[ensures((^b)@ == scalar_b_fold(
+    initial_a@, initial_b@, bytes@.subsequence(0, offset@ + 1),
+))]
+#[allow(unused_variables)]
+fn process_scalar_byte(
+    a: &mut u32,
+    b: &mut u32,
+    bytes: &[u8],
+    offset: usize,
+    initial_a: u32,
+    initial_b: u32,
+) {
+    const MOD: u32 = 65521;
+
+    let byte = bytes[offset];
+    let count = snapshot! { offset@ + 1 };
+    let prefix = snapshot! { bytes@.subsequence(0, offset@) };
+    let complete = snapshot! { bytes@.subsequence(0, *count) };
+    let old_a = snapshot! { (*a)@ };
+    let old_b = snapshot! { (*b)@ };
+    proof_assert! {
+        sequence_prefix_push(bytes@, *count, byte);
+        *complete == (*prefix).push_back(byte)
+    };
+    proof_assert!((*a)@ + byte@ <= u32::MAX@);
+    *a = (*a + u32::from(byte)) % MOD;
+    proof_assert!((*a)@ == (*old_a + byte@) % 65521);
+    proof_assert!((*b)@ + (*a)@ <= u32::MAX@);
+    *b = (*b + *a) % MOD;
+    proof_assert!((*b)@ == (*old_b + (*a)@) % 65521);
+    proof_assert! {
+        scalar_fold_push(initial_a@, initial_b@, *prefix, *complete, byte);
+        (*a)@ == scalar_a_fold(initial_a@, *complete)
+    };
+    proof_assert! {
+        scalar_fold_push(initial_a@, initial_b@, *prefix, *complete, byte);
+        (*b)@ == scalar_b_fold(initial_a@, initial_b@, *complete)
+    };
+}
+
+#[requires(a@ <= u16::MAX@ && b@ <= u16::MAX@)]
+#[ensures((^state).deep_model() == (a@, b@))]
+fn store_scalar_state(state: &mut Adler32, a: u32, b: u32) {
+    state.a = a as u16;
+    state.b = b as u16;
+}
+
 impl Adler32 {
+    /// Updates the checksum with the scalar Adler recurrence.
+    ///
+    /// The verification copy deliberately performs the reduction after every
+    /// byte.  This is mathematically equivalent to deferring reductions in the
+    /// upstream four-lane implementation and keeps the integrated proof small.
     #[allow(unused_variables)]
     #[ensures((^self).a@ < 65521)]
     #[ensures((^self).b@ < 65521)]
     #[ensures((^self).deep_model() == crate::adler32_update((*self).deep_model(), bytes@))]
     pub(crate) fn compute(&mut self, bytes: &[u8]) {
+        const MOD: u32 = 65521;
+
+        let mut a = u32::from(self.a);
+        let mut b = u32::from(self.b);
+        let initial_a_value = a;
+        let initial_b_value = b;
+        let initial_a = snapshot! { a@ };
+        let initial_b = snapshot! { b@ };
+        a %= MOD;
+        b %= MOD;
+
+        let mut offset = 0usize;
+        #[invariant(offset@ <= bytes@.len())]
+        #[invariant(a@ <= u16::MAX@ && b@ <= u16::MAX@)]
+        #[invariant(a@ == scalar_a_fold(
+            *initial_a, bytes@.subsequence(0, offset@),
+        ))]
+        #[invariant(b@ == scalar_b_fold(
+            *initial_a, *initial_b, bytes@.subsequence(0, offset@),
+        ))]
+        #[variant(bytes@.len() - offset@)]
+        while offset < bytes.len() {
+            let count = snapshot! { offset@ + 1 };
+            process_scalar_byte(
+                &mut a,
+                &mut b,
+                bytes,
+                offset,
+                initial_a_value,
+                initial_b_value,
+            );
+            offset += 1;
+            proof_assert!(offset@ == *count);
+        }
+
+        proof_assert!(offset@ == bytes@.len());
+        proof_assert! {
+            scalar_fold_equivalent(*initial_a, *initial_b, bytes@);
+            scalar_a_fold(*initial_a, bytes@)
+                == (*initial_a + crate::adler32_byte_sum(bytes@)) % 65521
+                && scalar_b_state(
+                    scalar_b_fold(*initial_a, *initial_b, bytes@),
+                    *initial_a,
+                    *initial_b,
+                    bytes@.len(),
+                    bytes@,
+                )
+        };
+        store_scalar_state(self, a, b);
+        proof_assert!((^self).deep_model()
+            == crate::adler32_update((*initial_a, *initial_b), bytes@));
+    }
+
+    #[cfg(any())]
+    #[allow(unused_variables)]
+    #[ensures((^self).a@ < 65521)]
+    #[ensures((^self).b@ < 65521)]
+    #[ensures((^self).deep_model() == crate::adler32_update((*self).deep_model(), bytes@))]
+    fn compute_optimized(&mut self, bytes: &[u8]) {
         // The basic algorithm is, for every byte:
         //   a = (a + byte) % MOD
         //   b = (b + a) % MOD

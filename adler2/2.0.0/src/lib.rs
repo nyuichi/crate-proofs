@@ -13,6 +13,8 @@
 #![doc(test(attr(deny(unused_imports, unused_must_use))))]
 #![cfg_attr(docsrs, feature(doc_cfg))]
 #![warn(missing_debug_implementations)]
+#![allow(unexpected_cfgs)]
+#![cfg_attr(creusot, allow(missing_debug_implementations))]
 #![forbid(unsafe_code)]
 #![cfg_attr(not(feature = "std"), no_std)]
 
@@ -91,7 +93,8 @@ use std::io::{self, BufRead};
 /// [`new`]: #method.new
 /// [`from_checksum`]: #method.from_checksum
 /// [`checksum`]: #method.checksum
-#[derive(Debug, Copy, Clone)]
+#[derive(Copy, Clone)]
+#[cfg_attr(not(creusot), derive(Debug))]
 pub struct Adler32 {
     a: u16,
     b: u16,
@@ -118,10 +121,14 @@ impl DeepModel for Adler32 {
 }
 
 impl Invariant for Adler32 {
-    /// Both stored accumulators are canonical residues modulo 65521.
+    /// Every pair of stored `u16` accumulators is a valid representation.
+    ///
+    /// `from_checksum` deliberately accepts every `u32`, including values whose
+    /// halves are not canonical residues modulo 65521. The next update reduces
+    /// both accumulators to canonical residues.
     #[logic(open)]
     fn invariant(self) -> bool {
-        pearlite! { self.deep_model().0 < 65521 && self.deep_model().1 < 65521 }
+        pearlite! { true }
     }
 }
 
@@ -218,6 +225,7 @@ fn adler32_weighted_sum_push(bytes: Seq<u8>, byte: u8) {
 
 #[logic]
 #[variant(right.len())]
+#[allow(dead_code)]
 #[ensures(adler32_byte_sum(left.concat(right))
     == adler32_byte_sum(left) + adler32_byte_sum(right))]
 pub(crate) fn adler32_byte_sum_concat(left: Seq<u8>, right: Seq<u8>) {
@@ -243,6 +251,7 @@ pub(crate) fn adler32_byte_sum_concat(left: Seq<u8>, right: Seq<u8>) {
 
 #[logic]
 #[variant(right.len())]
+#[allow(dead_code)]
 #[ensures(adler32_weighted_sum(left.concat(right))
     == adler32_weighted_sum(left)
         + right.len() * adler32_byte_sum(left)
@@ -316,10 +325,10 @@ pub(crate) fn adler32_weighted_sum_last_four(bytes: Seq<u8>) {
     proof_assert!(p1[p1.len() - 1] == bytes[bytes.len() - 2]);
 }
 
-/// Updating a reduced state produces another reduced state.
+/// Updating any nonnegative state produces a reduced state.
 #[logic]
-#[requires(0 <= state.0 && state.0 < 65521)]
-#[requires(0 <= state.1 && state.1 < 65521)]
+#[requires(0 <= state.0)]
+#[requires(0 <= state.1)]
 #[ensures(0 <= adler32_update(state, bytes).0
     && adler32_update(state, bytes).0 < 65521)]
 #[ensures(0 <= adler32_update(state, bytes).1
@@ -373,8 +382,8 @@ impl Adler32 {
     #[ensures(result.deep_model().1 == sum@ / 65536)]
     pub const fn from_checksum(sum: u32) -> Self {
         Adler32 {
-            a: sum as u16,
-            b: (sum >> 16) as u16,
+            a: (sum % 65536) as u16,
+            b: (sum / 65536) as u16,
         }
     }
 
@@ -382,7 +391,7 @@ impl Adler32 {
     #[inline]
     #[ensures(result@ == adler32_pack(self.deep_model()))]
     pub fn checksum(&self) -> u32 {
-        (u32::from(self.b) << 16) | u32::from(self.a)
+        u32::from(self.b) * 65536 + u32::from(self.a)
     }
 
     /// Adds `bytes` to the checksum calculation.
@@ -460,6 +469,8 @@ pub fn adler32_slice(data: &[u8]) -> u32 {
 #[cfg_attr(docsrs, doc(cfg(feature = "std")))]
 // Creusot does not currently specify BufRead's stateful fill_buf/consume protocol.
 // The checksum core used by this adapter is verified separately.
+// TODO: Remove this boundary once BufRead exposes a logical unread-byte sequence
+// and contracts connecting fill_buf/consume to that sequence.
 #[trusted]
 pub fn adler32<R: BufRead>(mut reader: R) -> io::Result<u32> {
     let mut h = Adler32::new();
@@ -524,6 +535,15 @@ mod tests {
         let mut adler = Adler32::from_checksum(partial);
         adler.write_slice(&[0xff; 1024 * 1024 - 1024]);
         assert_eq!(adler.checksum(), 0x8e88ef11); // from above
+    }
+
+    #[test]
+    fn resume_from_noncanonical_checksum() {
+        let mut sum = Adler32::from_checksum(u32::MAX);
+        assert_eq!(sum.checksum(), u32::MAX);
+
+        sum.write_slice(&[0]);
+        assert_eq!(sum.checksum(), 0x001C_000E);
     }
 
     #[cfg(feature = "std")]

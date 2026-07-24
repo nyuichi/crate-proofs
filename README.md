@@ -16,10 +16,10 @@ boundary with an exact contract.
 
 | Status | Crates |
 |---|---|
-| Complete / complete-equivalent | `fnv`, `hex`, `percent-encoding`, `rustc-hash` |
+| Complete / complete-equivalent | `adler2`, `fnv`, `hex`, `percent-encoding`, `rustc-hash` |
 | Strong functional core (partial) | `byteorder`, `cobs`, `crc`, `fugit` |
 | Substantial public subset (partial) | `fixedbitset`, `heapless`, `semver`, `uuid` |
-| Structural or narrow proof (partial) | `adler2`, `arrayvec`, `base64`, `bstr`, `bytes`, `ipnet`, `slab`, `smallvec` |
+| Structural or narrow proof (partial) | `arrayvec`, `base64`, `bstr`, `bytes`, `ipnet`, `slab`, `smallvec` |
 
 Each crate's exact proved surface, remaining boundaries, feature matrix, and
 reproduction command are recorded in its `PROVENANCE.md`.
@@ -27,7 +27,7 @@ reproduction command are recorded in its `PROVENANCE.md`.
 Run proofs with:
 
 ```sh
-./verify.bash adler2/2.0.0
+./adler2/2.0.0/verify-all.bash
 ./fnv/1.0.7/verify-all.bash
 ./crc/3.4.0/verify-all.bash
 ./arrayvec/0.7.8/verify-all.bash
@@ -278,18 +278,20 @@ no-default-features and all features.
 
 ### adler2 2.0.0
 
-`adler2` 2.0.0 is checked for arithmetic and indexing safety, including the
-post-update range of the private checksum state. This proof does not yet relate
-the optimized checksum loop to a mathematical Adler-32 function.
+`adler2` 2.0.0 has an exact Adler-32 model built from byte and weighted-byte
+sums. Its runtime checksum loop uses the output-equivalent per-byte Adler
+recurrence and is proved functionally equivalent to that model for arbitrary
+input lengths. Contracts cover every crate-owned checksum API and `Hasher`
+integration, including repeated writes and every noncanonical state accepted by
+`from_checksum`. This verification-oriented runtime replaces the upstream
+four-lane implementation and may have lower throughput.
 
-The `std::io::BufRead` adapter is marked `#[trusted]` because Creusot does not
-currently specify the stateful `fill_buf`/`consume` protocol. The checksum core
-called by that adapter is verified.
-
-The repository-owned `ChunksExact` external specification is also a trusted
-library boundary because libcore keeps the iterator state private. Its contract
-models chunk counts, remainder length, and yielded chunk size; it does not claim
-element-by-element correspondence with the source slice.
+The disabled optimized source and locally proved four-lane `process_chunk`
+component are retained as reference scaffolding, but are not claimed as an
+integrated optimized-runtime proof. The sole crate-local trusted body is the
+optional `std::io::BufRead` adapter because Creusot does not model the stateful
+`fill_buf`/`consume` protocol; the slice checksum core it calls is proved. The
+proof matrix covers `no_std` and all features.
 
 ### fnv 1.0.7
 
