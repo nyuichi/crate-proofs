@@ -33,6 +33,7 @@ reproduction command are recorded in its `PROVENANCE.md`. Run the proofs with:
 ./base64/0.22.1/verify-all.bash
 ./ipnet/2.12.0/verify-all.bash
 ./heapless/0.9.2/verify-all.bash
+./itoa/1.0.18/verify-all.bash
 ./crossbeam-queue/0.3.13/verify-all.bash
 ./indexmap/2.14.0/verify-all.bash
 ./utf8parse/0.2.2/verify-all.bash
@@ -44,6 +45,20 @@ reproduction command are recorded in its `PROVENANCE.md`. Run the proofs with:
 standard-library specifications used by the proofs.
 
 ## Current proofs
+
+### itoa 1.0.18
+
+`itoa` 1.0.18 has an exact signed decimal ASCII model for every supported
+integer primitive. The proof establishes magnitude and sign conversion,
+recursive digit writing, the 40-byte capacity bound, exact start indices, and
+the complete result of public `Buffer::format`, including `i128::MIN`. Default
+and all-feature integrated runs each prove 67 files.
+
+Ordinary builds retain the published lookup-table and `MaybeUninit` runtime
+implementation. The verification build uses an equivalent initialized-buffer
+writer so that raw-memory details do not obscure the decimal algorithm. The
+only trusted leaf converts an already-proved ASCII suffix to `str`; its exact
+byte contract and removal condition are recorded in `PROVENANCE.md`.
 
 ### crossbeam-queue 0.3.13
 
