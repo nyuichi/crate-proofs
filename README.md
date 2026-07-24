@@ -33,6 +33,7 @@ reproduction command are recorded in its `PROVENANCE.md`. Run the proofs with:
 ./base64/0.22.1/verify-all.bash
 ./ipnet/2.12.0/verify-all.bash
 ./heapless/0.9.2/verify-all.bash
+./crossbeam-queue/0.3.13/verify-all.bash
 ./indexmap/2.14.0/verify-all.bash
 ./utf8parse/0.2.2/verify-all.bash
 ./unicode-ident/1.0.24/verify-all.bash
@@ -43,6 +44,23 @@ reproduction command are recorded in its `PROVENANCE.md`. Run the proofs with:
 standard-library specifications used by the proofs.
 
 ## Current proofs
+
+### crossbeam-queue 0.3.13
+
+`crossbeam-queue` 0.3.13 has exact element-sequence models for `ArrayQueue` and
+`SegQueue`. Empty construction, length and emptiness observations, bounded
+capacity/fullness, and the FIFO effects of the exclusive `push_mut` and
+`pop_mut` APIs are proved. Full bounded pushes preserve the queue and return
+the rejected value; successful pops return and remove the logical head.
+
+This is a single-owner state-machine proof, not a proof of the lock-free
+implementation. Atomics, compare-exchange loops, memory ordering,
+linearizability, progress, raw slot storage, allocation/reclamation, concurrent
+APIs, drops, and iterators remain explicitly excluded. Ordinary builds retain
+the complete upstream implementation. The proof matrix covers `no_std +
+alloc`, default `std`, and all features; the ordinary all-feature suite passes
+23 integration tests and 19 documentation tests. Full boundaries are recorded
+in the crate's `PROVENANCE.md`.
 
 ### indexmap 2.14.0
 
