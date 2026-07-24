@@ -1,0 +1,23 @@
+[package]
+name = "hashbrown-creusot-proof"
+version = "0.17.1"
+edition = "2024"
+rust-version = "1.85.0"
+publish = false
+
+[features]
+default = ["default-hasher", "inline-more", "allocator-api2", "equivalent", "raw-entry"]
+default-hasher = []
+inline-more = []
+allocator-api2 = []
+equivalent = []
+raw-entry = []
+serde = []
+
+[lib]
+name = "hashbrown_verification"
+path = "../src/verification.rs"
+
+[dependencies.creusot-std]
+path = "../../../creusot-libs/creusot-std"
+
