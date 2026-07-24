@@ -34,6 +34,9 @@ reproduction command are recorded in its `PROVENANCE.md`. Run the proofs with:
 ./ipnet/2.12.0/verify-all.bash
 ./heapless/0.9.2/verify-all.bash
 ./crossbeam-queue/0.3.13/verify-all.bash
+./indexmap/2.14.0/verify-all.bash
+./utf8parse/0.2.2/verify-all.bash
+./unicode-ident/1.0.24/verify-all.bash
 ```
 
 `creusot-libs` contains the Creusot libraries pinned at commit
@@ -58,6 +61,49 @@ the complete upstream implementation. The proof matrix covers `no_std +
 alloc`, default `std`, and all features; the ordinary all-feature suite passes
 23 integration tests and 19 documentation tests. Full boundaries are recorded
 in the crate's `PROVENANCE.md`.
+
+### indexmap 2.14.0
+
+`indexmap` 2.14.0 has exact ordered-sequence models for `IndexMap` and
+`IndexSet`. Caller-hasher construction, length and emptiness observation,
+clearing, exact prefix truncation, ordered popping, shift removal by index,
+position exchange, and content-preserving capacity operations are body-proved.
+The proof matrix covers `no_std`, default `std`, and all features.
+
+This is a positional order proof, not a hash-table or key-uniqueness proof.
+Hash/equality coherence, key lookup and insertion, entry APIs, iterators,
+sorting, draining, raw and disjoint access, and optional adapters remain outside
+proof translation. Random-state construction is the sole narrow trusted body;
+its contract asserts only that the result is empty. Full boundaries and the
+removal condition are recorded in `PROVENANCE.md`.
+
+### utf8parse 0.2.2
+
+`utf8parse` 0.2.2 has an exact model of all byte-class transitions and parser
+accumulator updates. The proof establishes the complete transition table,
+state-specific reachable ranges, preservation of the parser invariant for every
+input byte, and the safety of the unchecked Unicode scalar construction. The
+integrated no-feature run proves 14 files.
+
+Receiver callbacks remain abstract because the public `Receiver` trait imposes
+no semantic model on implementors. Two verification-only equality adapters are
+trusted and tied to exact deep models; the transition, accumulator, scalar
+safety, and public `advance` bodies are all proved. Full scope and removal
+conditions are recorded in the crate's `PROVENANCE.md`.
+
+### unicode-ident 1.0.24
+
+`unicode-ident` 1.0.24 has exact classification models for both XID_Start and
+XID_Continue. The ASCII branches, non-ASCII trie/half-chunk offset arithmetic,
+leaf bounds, all eight leaf-bit positions, and both public API bodies are
+proved. An exhaustive runtime comparison checks every valid Unicode scalar
+value against independently generated Unicode 17.0.0 range tables.
+
+The pinned Creusot cannot translate immutable static arrays or `char`-to-
+integer casts, so generated table-byte access and scalar-value conversion are
+narrow explicit trusted boundaries with exact contracts. The published
+compressed tables and optimized runtime implementation are preserved. Full
+scope and removal conditions are recorded in `PROVENANCE.md`.
 
 ### heapless 0.9.2
 
