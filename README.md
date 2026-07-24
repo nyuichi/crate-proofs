@@ -33,6 +33,7 @@ reproduction command are recorded in its `PROVENANCE.md`. Run the proofs with:
 ./base64/0.22.1/verify-all.bash
 ./ipnet/2.12.0/verify-all.bash
 ./heapless/0.9.2/verify-all.bash
+./bitflags/2.13.1/verify-all.bash
 ./itoa/1.0.18/verify-all.bash
 ./crossbeam-queue/0.3.13/verify-all.bash
 ./indexmap/2.14.0/verify-all.bash
@@ -45,6 +46,20 @@ reproduction command are recorded in its `PROVENANCE.md`. Run the proofs with:
 standard-library specifications used by the proofs.
 
 ## Current proofs
+
+### bitflags 2.13.1
+
+`bitflags` 2.13.1 has an exact `u8` bit-vector model for a representative
+three-flag macro expansion. Construction, checked/retaining/truncating
+conversion, known and unknown bit observations, containment and intersection,
+all four set-algebra operations, known-bit complement, mutations, and value and
+assignment operator adapters are proved. The matrix covers no-default-features,
+default features, and all features.
+
+This is a representative generated-core proof, not a proof of generic macro
+expansion for every integer width. Parsing, formatting, iteration, named lookup,
+and optional integrations remain outside translation. Full scope and the
+generic-model removal condition are recorded in `PROVENANCE.md`.
 
 ### itoa 1.0.18
 
