@@ -39,6 +39,7 @@ reproduction command are recorded in its `PROVENANCE.md`. Run the proofs with:
 ./indexmap/2.14.0/verify-all.bash
 ./utf8parse/0.2.2/verify-all.bash
 ./unicode-ident/1.0.24/verify-all.bash
+./hashbrown/0.17.1/verify-all.bash
 ```
 
 `creusot-libs` contains the Creusot libraries pinned at commit
@@ -46,6 +47,21 @@ reproduction command are recorded in its `PROVENANCE.md`. Run the proofs with:
 standard-library specifications used by the proofs.
 
 ## Current proofs
+
+### hashbrown 0.17.1
+
+`hashbrown` 0.17.1 has an exact scalar model of valid SwissTable control-byte
+states and sequence models for hash-independent `HashTable`, `HashMap`, and
+`HashSet` transitions. Empty/special/full classification, special/full
+conversion, construction, length, emptiness, clearing, and the table's unique
+append/pop transitions are body-proved in three feature configurations. An
+exhaustive test connects the scalar control specification to the generic
+control group's bit expressions for every valid byte encoding.
+
+This is a partial structural proof, not a refinement proof of the runtime raw
+table. Allocation, raw pointers, SIMD groups, probing, rehashing, hash/equality
+coherence, uniqueness, and key-based APIs remain excluded. Full boundaries and
+the next removal milestone are recorded in `PROVENANCE.md`.
 
 ### bitflags 2.13.1
 
